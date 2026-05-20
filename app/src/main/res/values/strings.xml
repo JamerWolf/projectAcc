@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">project acc</string>
+    <string name="accessibility_service_description">This service helps with accessibility features.</string>
+</resources>
