@@ -30,6 +30,10 @@ class MyAccessibilityService : AccessibilityService() {
     // Controla si ya se escaneó la lista al iniciar el auto-clic
     private var hasScannedInitially = false
 
+    // Cooldown para evitar clics repetidos en auto-accept
+    private var lastClickTime: Long = 0L
+    private val CLICK_COOLDOWN_MS = 2000L
+
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event != null && event.packageName == "co.picap.passenger") {
             val rootNode = rootInActiveWindow ?: return
@@ -71,20 +75,24 @@ class MyAccessibilityService : AccessibilityService() {
             flattenContentDescriptions(rootNode, nodesContent)
             val order = parseOrder(nodesContent)
 
-            // Solo procesamos si es una orden nueva basada en el ID
-            if (order.id.isNotEmpty() && order.id != lastOrder?.id) {
-                
-                // --- AUTO-ACCEPT: Si cumple condiciones, hacer clic en "Aceptar" ---
-                if (shouldAutoAccept(order)) {
+            // --- AUTO-ACCEPT: Evaluar siempre que haya ID, sin importar si es la misma orden ---
+            if (order.id.isNotEmpty() && shouldAutoAccept(order)) {
+                val now = System.currentTimeMillis()
+                if (now - lastClickTime >= CLICK_COOLDOWN_MS) {
                     Log.d(TAG, "AUTO-ACCEPT: Orden califica para auto-acept. Buscando botón...")
                     if (findAndClickAcceptButton(rootNode)) {
+                        lastClickTime = System.currentTimeMillis()
                         Log.i(TAG, "AUTO-ACCEPT: ✅ Orden auto-aceptada! No se mostrará en UI.")
                         rootNode.recycle()
                         return  // No guardamos la orden en la UI porque ya se aceptó
                     }
+                } else {
+                    Log.d(TAG, "AUTO-ACCEPT: En cooldown, esperando... (${CLICK_COOLDOWN_MS - (now - lastClickTime)}ms restantes)")
                 }
-                
-                // Si llegamos aquí, la orden no se auto-aceptó: guardarla en la UI normalmente
+            }
+
+            // Actualizar UI solo si es una orden nueva basada en el ID
+            if (order.id.isNotEmpty() && order.id != lastOrder?.id) {
                 lastOrder = order
                 OrderStateManager.setOrder(order)
 
@@ -321,8 +329,13 @@ class MyAccessibilityService : AccessibilityService() {
      * Extrae los kilómetros de recogida de un string como "A 9 mins (4.31 km)"
      */
     private fun extractKmFromPickup(pickupText: String): Double {
-        val match = Regex("\\(([\\d,\\.]+)\\s*km\\)").find(pickupText)
-        return match?.groupValues?.get(1)?.replace(",", ".")?.toDoubleOrNull() ?: 999.0
+        val match = Regex("\\(([\\d,\\.]+)\\s*(km|m)\\)").find(pickupText)
+        if (match != null) {
+            val value = match.groupValues[1].replace(",", ".").toDoubleOrNull() ?: return 999.0
+            val unit = match.groupValues[2]
+            return if (unit == "m") value / 1000.0 else value
+        }
+        return 999.0
     }
 
     /**
