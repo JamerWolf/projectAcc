@@ -41,7 +41,16 @@ class MyAccessibilityService : AccessibilityService() {
 
     private var floatingPopup: FloatingPopupManager? = null
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    
+
+    /**
+     * Public method called by NotificationInterceptorService to paste text.
+     * This allows the notification service to trigger paste without direct node access.
+     */
+    fun pasteFromNotification(text: String) {
+        Log.d(TAG, "WHATSAPP: pasteFromNotification called: $text")
+        pasteAndSend(text)
+    }
+
     // Almacena el último porcentaje detectado para evitar logs repetitivos de la misma barra
     private var lastPercentage: Int = -1
 

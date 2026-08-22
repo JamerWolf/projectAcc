@@ -3,11 +3,25 @@ package com.example.projectacc
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
+import com.example.projectacc.floating.FloatingPopupManager
+import com.example.projectacc.parser.WhatsAppParser
 
 class NotificationInterceptorService : NotificationListenerService() {
     private val TAG = "NotificationInterceptor"
 
     private val plateRequestPatterns = listOf("placa", "vehiculo", "vehículo", "ascopec", "tarjeta de propietario")
+    private var floatingPopup: FloatingPopupManager? = null
+
+    override fun onCreate() {
+        super.onCreate()
+        floatingPopup = FloatingPopupManager(this)
+    }
+
+    override fun onDestroy() {
+        floatingPopup?.dismiss()
+        floatingPopup = null
+        super.onDestroy()
+    }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         sbn ?: return
@@ -73,14 +87,15 @@ class NotificationInterceptorService : NotificationListenerService() {
         val title = extras.getString("android.title") ?: extras.getCharSequence("android.title")?.toString() ?: ""
         val text = extras.getString("android.text") ?: extras.getCharSequence("android.text")?.toString() ?: ""
 
-        val fullText = "$title $text".lowercase()
+        val fullText = "$title $text"
+        val lowerText = fullText.lowercase()
         Log.d(TAG, "WhatsApp notificación: titulo='$title', texto='$text'")
 
         // 1. AUTO-PLACA: Detectar solicitud de placa en chat privado
         if (OrderStateManager.isAutoPlateEnabled.value) {
             val plate = OrderStateManager.vehiclePlate.value
             if (plate.isNotEmpty()) {
-                val isPlateRequest = plateRequestPatterns.any { pattern -> fullText.contains(pattern) }
+                val isPlateRequest = plateRequestPatterns.any { pattern -> lowerText.contains(pattern) }
                 if (isPlateRequest) {
                     Log.d(TAG, "AUTO-PLACA: Solicitud de placa detectada. Abriendo chat...")
                     clickNotification(notification)
@@ -89,12 +104,36 @@ class NotificationInterceptorService : NotificationListenerService() {
             }
         }
 
-        // 2. AUTO-SERVICIO: Detectar notificación de servicio en grupo y abrir chat
-        val isServiceNotification = fullText.contains("servicio") &&
-                (fullText.contains("origen") || fullText.contains("destino") || fullText.contains("precio") || fullText.contains("ganancia"))
-        if (isServiceNotification) {
-            Log.d(TAG, "AUTO-SERVICIO: Notificación de servicio detectada. Abriendo chat...")
-            clickNotification(notification)
+        // 2. AUTO-SERVICIO: Detectar notificación de servicio en grupo
+        // Intentar parsear el texto de la notificación como servicio
+        val service = WhatsAppParser.parse(fullText)
+        if (service != null) {
+            // Verificar si ya fue escaneado
+            val scannedIds = OrderStateManager.scannedWhatsAppServiceIds.value
+            if (scannedIds.contains(service.id)) {
+                Log.d(TAG, "AUTO-SERVICIO: Servicio #${service.id} ya escaneado. Ignorando.")
+                return
+            }
+
+            Log.d(TAG, "AUTO-SERVICIO: Servicio #${service.id} detectado en notificación. Mostrando popup...")
+
+            // Guardar en estado
+            OrderStateManager.setWhatsAppOrder(service)
+            OrderStateManager.addScannedWhatsAppServiceId(service.id)
+
+            // Mostrar popup flotante directamente desde la notificación
+            if (floatingPopup?.canDrawOverlays() == true) {
+                floatingPopup?.show(service) { acceptedService ->
+                    // El popup fue aceptado - pegar "Me interesa {id}"
+                    val myAccessibilityService = MyAccessibilityService.instance
+                    if (myAccessibilityService != null) {
+                        // Usar el método del servicio de accesibilidad para pegar
+                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                            MyAccessibilityService.instance?.pasteFromNotification("Me interesa ${acceptedService.id}")
+                        }, 500)
+                    }
+                }
+            }
         }
     }
 
