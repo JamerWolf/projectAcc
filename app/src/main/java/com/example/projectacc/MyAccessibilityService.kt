@@ -185,7 +185,27 @@ class MyAccessibilityService : AccessibilityService() {
 
         Log.d(TAG, "WHATSAPP: Procesando texto en background (${fullText.length} chars)")
 
-        // Parse on background thread
+        // 1. AUTO-PLATE: Check FIRST - works on any WhatsApp screen (private chats, groups)
+        if (OrderStateManager.isAutoPlateEnabled.value) {
+            val plate = OrderStateManager.vehiclePlate.value
+            if (plate.isNotEmpty()) {
+                val lowerText = fullText.lowercase()
+                val isPlateRequest = plateRequestPatterns.any { pattern -> lowerText.contains(pattern) }
+                if (isPlateRequest) {
+                    val now = System.currentTimeMillis()
+                    if (now - lastAutoPlateTime >= AUTO_PLATE_COOLDOWN_MS) {
+                        Log.d(TAG, "WHATSAPP: Solicitud de placa detectada. Pegando placa: $plate")
+                        lastAutoPlateTime = now
+                        withContext(Dispatchers.Main) {
+                            pasteAndSend(plate)
+                        }
+                        return
+                    }
+                }
+            }
+        }
+
+        // 2. SERVICE MESSAGE: Parse and show floating popup
         val service = WhatsAppParser.parse(fullText) ?: return
 
         // Check if already scanned
@@ -205,26 +225,6 @@ class MyAccessibilityService : AccessibilityService() {
             withContext(Dispatchers.Main) {
                 floatingPopup?.show(service) { acceptedService ->
                     pasteAndSend("Me interesa ${acceptedService.id}")
-                }
-            }
-            return
-        }
-
-        // Auto-plate: detect plate request in private messages
-        if (OrderStateManager.isAutoPlateEnabled.value) {
-            val plate = OrderStateManager.vehiclePlate.value
-            if (plate.isNotEmpty()) {
-                val lowerText = fullText.lowercase()
-                val isPlateRequest = plateRequestPatterns.any { pattern -> lowerText.contains(pattern) }
-                if (isPlateRequest) {
-                    val now = System.currentTimeMillis()
-                    if (now - lastAutoPlateTime >= AUTO_PLATE_COOLDOWN_MS) {
-                        Log.d(TAG, "WHATSAPP: Solicitud de placa detectada. Pegando placa: $plate")
-                        lastAutoPlateTime = now
-                        withContext(Dispatchers.Main) {
-                            pasteAndSend(plate)
-                        }
-                    }
                 }
             }
         }

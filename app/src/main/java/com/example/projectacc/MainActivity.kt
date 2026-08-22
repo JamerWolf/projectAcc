@@ -86,7 +86,7 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                     ) { innerPadding ->
-                        val allPermissionsGranted = isServiceEnabled && isOverlayEnabled
+                        val allPermissionsGranted = isServiceEnabled && isOverlayEnabled && isNotificationListenerEnabled
 
                         if (allPermissionsGranted) {
                             MainScreen(
@@ -98,8 +98,10 @@ class MainActivity : ComponentActivity() {
                             ActivationScreen(
                                 isAccessibilityEnabled = isServiceEnabled,
                                 isOverlayEnabled = isOverlayEnabled,
+                                isNotificationListenerEnabled = isNotificationListenerEnabled,
                                 onOpenAccessibilitySettings = { openAccessibilitySettings() },
                                 onOpenOverlaySettings = { openOverlaySettings() },
+                                onOpenNotificationSettings = { openNotificationListenerSettings() },
                                 modifier = Modifier.padding(innerPadding)
                             )
                         }
@@ -181,8 +183,10 @@ class MainActivity : ComponentActivity() {
 fun ActivationScreen(
     isAccessibilityEnabled: Boolean,
     isOverlayEnabled: Boolean,
+    isNotificationListenerEnabled: Boolean,
     onOpenAccessibilitySettings: () -> Unit,
     onOpenOverlaySettings: () -> Unit,
+    onOpenNotificationSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -226,9 +230,19 @@ fun ActivationScreen(
             onActivate = onOpenOverlaySettings
         )
 
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Notification Listener permission
+        PermissionCard(
+            title = "3. Escuchador de Notificaciones",
+            description = "Permite detectar notificaciones de Picap y mensajes de WhatsApp para automatizar respuestas.",
+            isEnabled = isNotificationListenerEnabled,
+            onActivate = onOpenNotificationSettings
+        )
+
         Spacer(modifier = Modifier.height(32.dp))
 
-        if (isAccessibilityEnabled && isOverlayEnabled) {
+        if (isAccessibilityEnabled && isOverlayEnabled && isNotificationListenerEnabled) {
             Text(
                 text = "Todos los permisos activados ✓",
                 style = MaterialTheme.typography.bodyLarge,
