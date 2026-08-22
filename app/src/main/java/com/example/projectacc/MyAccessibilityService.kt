@@ -180,16 +180,26 @@ class MyAccessibilityService : AccessibilityService() {
         }
     }
 
+    // Patterns that indicate this is a RESPONSE message (not a service offer)
+    private val responsePatterns = listOf("genial", "asignarte", "envíame la placa", "enviame la placa", "para asignarte")
+
     private suspend fun processWhatsAppText(fullText: String) {
         if (fullText.isEmpty()) return
 
         Log.d(TAG, "WHATSAPP: Procesando texto en background (${fullText.length} chars)")
 
+        // 0. SKIP RESPONSE MESSAGES: These contain service data but are NOT offers
+        val lowerText = fullText.lowercase()
+        val isResponse = responsePatterns.any { pattern -> lowerText.contains(pattern) }
+        if (isResponse) {
+            Log.d(TAG, "WHATSAPP: Mensaje de respuesta detectado. Ignorando parser de servicios.")
+            // Still check for auto-plate in case it's a different response
+        }
+
         // 1. AUTO-PLATE: Check FIRST - works on any WhatsApp screen (private chats, groups)
         if (OrderStateManager.isAutoPlateEnabled.value) {
             val plate = OrderStateManager.vehiclePlate.value
             if (plate.isNotEmpty()) {
-                val lowerText = fullText.lowercase()
                 val isPlateRequest = plateRequestPatterns.any { pattern -> lowerText.contains(pattern) }
                 if (isPlateRequest) {
                     val now = System.currentTimeMillis()
@@ -205,7 +215,9 @@ class MyAccessibilityService : AccessibilityService() {
             }
         }
 
-        // 2. SERVICE MESSAGE: Parse and show floating popup
+        // 2. SERVICE MESSAGE: Parse and show floating popup (skip if it's a response)
+        if (isResponse) return
+
         val service = WhatsAppParser.parse(fullText) ?: return
 
         // Check if already scanned
