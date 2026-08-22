@@ -121,12 +121,12 @@ class NotificationInterceptorService : NotificationListenerService() {
             OrderStateManager.setWhatsAppOrder(service)
             OrderStateManager.addScannedWhatsAppServiceId(service.id)
 
-            // Guardar acción pendiente (necesita abrir WhatsApp)
+            // Guardar acción pendiente (necesita abrir WhatsApp con el chat específico)
             OrderStateManager.setPendingWhatsAppAction(
                 PendingWhatsAppAction(
                     service = service,
                     needsOpenChat = true,
-                    chatPackage = sbn.packageName
+                    contentIntent = notification.contentIntent
                 )
             )
 

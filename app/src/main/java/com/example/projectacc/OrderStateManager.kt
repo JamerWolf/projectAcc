@@ -151,10 +151,10 @@ object OrderStateManager {
  * Represents a pending WhatsApp action that was triggered from a notification.
  * @param service The service data
  * @param needsOpenChat If true, need to open WhatsApp first before pasting
- * @param chatPackage The WhatsApp package to open (com.whatsapp or com.whatsapp.w4b)
+ * @param contentIntent Optional PendingIntent to open the specific chat
  */
 data class PendingWhatsAppAction(
-    val service: WhatsAppService,
+    val service: com.example.projectacc.model.WhatsAppService,
     val needsOpenChat: Boolean = true,
-    val chatPackage: String = "com.whatsapp"
+    val contentIntent: android.app.PendingIntent? = null
 )

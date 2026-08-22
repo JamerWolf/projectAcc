@@ -52,9 +52,9 @@ class MyAccessibilityService : AccessibilityService() {
 
         val pendingAction = OrderStateManager.pendingWhatsAppAction.value
         if (pendingAction != null && pendingAction.needsOpenChat) {
-            // Need to open WhatsApp first, then paste after delay
-            Log.d(TAG, "WHATSAPP: Abriendo WhatsApp (${pendingAction.chatPackage}) antes de pegar...")
-            openWhatsAppAndPaste(pendingAction.chatPackage, text)
+            // Need to open WhatsApp to the specific chat, then paste after delay
+            Log.d(TAG, "WHATSAPP: Abriendo chat de WhatsApp antes de pegar...")
+            openChatAndPaste(pendingAction.contentIntent, text)
             OrderStateManager.clearPendingWhatsAppAction()
         } else {
             // WhatsApp should already be open, paste directly
@@ -63,16 +63,15 @@ class MyAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * Opens WhatsApp to the last chat, waits for it to load, then pastes text.
+     * Opens WhatsApp to the specific chat using the notification's contentIntent,
+     * waits for it to load, then pastes text.
      */
-    private fun openWhatsAppAndPaste(packageName: String, text: String) {
+    private fun openChatAndPaste(contentIntent: android.app.PendingIntent?, text: String) {
         try {
-            // Launch WhatsApp
-            val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
-            if (launchIntent != null) {
-                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                startActivity(launchIntent)
-                Log.d(TAG, "WHATSAPP: WhatsApp abierto. Esperando carga...")
+            if (contentIntent != null) {
+                // Use the notification's contentIntent to open the specific chat
+                contentIntent.send()
+                Log.d(TAG, "WHATSAPP: Chat abierto via contentIntent. Esperando carga...")
 
                 // Wait for WhatsApp to load, then paste
                 android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
@@ -80,10 +79,14 @@ class MyAccessibilityService : AccessibilityService() {
                     pasteAndSend(text)
                 }, 1500) // 1.5 seconds to load
             } else {
-                Log.e(TAG, "WHATSAPP: No se pudo encontrar la app de WhatsApp")
+                // Fallback: just paste directly (WhatsApp might already be open)
+                Log.w(TAG, "WHATSAPP: No contentIntent disponible. Pegando directamente...")
+                pasteAndSend(text)
             }
         } catch (e: Exception) {
-            Log.e(TAG, "WHATSAPP: Error al abrir WhatsApp: ${e.message}")
+            Log.e(TAG, "WHATSAPP: Error al abrir chat: ${e.message}")
+            // Fallback: try to paste anyway
+            pasteAndSend(text)
         }
     }
 
