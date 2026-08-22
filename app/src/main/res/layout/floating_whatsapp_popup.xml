@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="320dp"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/floating_popup_bg"
+    android:padding="16dp"
+    android:elevation="8dp">
+
+    <!-- Header -->
+    <TextView
+        android:id="@+id/tvHeader"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="📱 Nuevo servicio WhatsApp"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:textColor="#FFFFFF"
+        android:layout_marginBottom="8dp" />
+
+    <!-- Service ID -->
+    <TextView
+        android:id="@+id/tvServiceId"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Servicio #0000"
+        android:textSize="22sp"
+        android:textStyle="bold"
+        android:textColor="#4CAF50"
+        android:layout_marginBottom="8dp" />
+
+    <!-- Empresa -->
+    <TextView
+        android:id="@+id/tvEmpresa"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textSize="14sp"
+        android:textColor="#CCCCCC"
+        android:layout_marginBottom="2dp" />
+
+    <!-- Servicio type -->
+    <TextView
+        android:id="@+id/tvServicio"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textSize="13sp"
+        android:textColor="#AAAAAA"
+        android:layout_marginBottom="8dp" />
+
+    <!-- Ciudad -->
+    <TextView
+        android:id="@+id/tvCiudad"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textSize="14sp"
+        android:textColor="#FFFFFF"
+        android:drawablePadding="4dp"
+        android:layout_marginBottom="4dp" />
+
+    <!-- Origen -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="📍 Origen:"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        android:textColor="#AAAAAA"
+        android:layout_marginBottom="2dp" />
+
+    <TextView
+        android:id="@+id/tvOrigen"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textSize="13sp"
+        android:textColor="#FFFFFF"
+        android:layout_marginBottom="6dp" />
+
+    <!-- Destino -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="🏁 Destino:"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        android:textColor="#AAAAAA"
+        android:layout_marginBottom="2dp" />
+
+    <TextView
+        android:id="@+id/tvDestino"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textSize="13sp"
+        android:textColor="#FFFFFF"
+        android:layout_marginBottom="6dp" />
+
+    <!-- Pago -->
+    <TextView
+        android:id="@+id/tvPago"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textSize="13sp"
+        android:textColor="#CCCCCC"
+        android:layout_marginBottom="4dp" />
+
+    <!-- Valor -->
+    <TextView
+        android:id="@+id/tvValor"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:textColor="#FFC107"
+        android:layout_marginBottom="12dp" />
+
+    <!-- Buttons -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/btnAccept"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:text="✅ Aceptar"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:backgroundTint="#4CAF50"
+            android:textColor="#FFFFFF"
+            android:layout_marginEnd="8dp" />
+
+        <Button
+            android:id="@+id/btnClose"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:text="✖ Cerrar"
+            android:textSize="14sp"
+            android:backgroundTint="#666666"
+            android:textColor="#FFFFFF" />
+    </LinearLayout>
+
+</LinearLayout>

@@ -1,5 +1,6 @@
 package com.example.projectacc
 
+import com.example.projectacc.model.WhatsAppService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -62,5 +63,74 @@ object OrderStateManager {
 
     fun setAutoAcceptByKmEnabled(enabled: Boolean) {
         _isAutoAcceptByKmEnabled.value = enabled
+    }
+
+    // WhatsApp orders
+    private val _currentWhatsAppOrder = MutableStateFlow<WhatsAppService?>(null)
+    val currentWhatsAppOrder: StateFlow<WhatsAppService?> = _currentWhatsAppOrder.asStateFlow()
+
+    private val _isWhatsAppAutoClickEnabled = MutableStateFlow(false)
+    val isWhatsAppAutoClickEnabled: StateFlow<Boolean> = _isWhatsAppAutoClickEnabled.asStateFlow()
+
+    fun setWhatsAppOrder(order: WhatsAppService) {
+        _currentWhatsAppOrder.value = order
+    }
+
+    fun clearWhatsAppOrder() {
+        _currentWhatsAppOrder.value = null
+    }
+
+    fun setWhatsAppAutoClickEnabled(enabled: Boolean) {
+        _isWhatsAppAutoClickEnabled.value = enabled
+    }
+
+    // WhatsApp scanned service IDs
+    private val _scannedWhatsAppServiceIds = MutableStateFlow<Set<String>>(emptySet())
+    val scannedWhatsAppServiceIds: StateFlow<Set<String>> = _scannedWhatsAppServiceIds.asStateFlow()
+
+    fun setScannedWhatsAppServiceIds(ids: Set<String>) {
+        _scannedWhatsAppServiceIds.value = ids
+    }
+
+    fun addScannedWhatsAppServiceId(id: String) {
+        _scannedWhatsAppServiceIds.value = _scannedWhatsAppServiceIds.value + id
+    }
+
+    fun clearScannedWhatsAppServiceIds() {
+        _scannedWhatsAppServiceIds.value = emptySet()
+    }
+
+    /**
+     * Limpia toda la cache de servicios escaneados (Picap + WhatsApp).
+     */
+    fun clearAllCache() {
+        _scannedServiceIds.value = emptySet()
+        _scannedWhatsAppServiceIds.value = emptySet()
+        _currentOrder.value = null
+        _currentWhatsAppOrder.value = null
+    }
+
+    // Vehicle plate
+    private val _vehiclePlate = MutableStateFlow("")
+    val vehiclePlate: StateFlow<String> = _vehiclePlate.asStateFlow()
+
+    fun setVehiclePlate(plate: String) {
+        _vehiclePlate.value = plate
+    }
+
+    // WhatsApp auto-plate (auto-paste plate on private message)
+    private val _isAutoPlateEnabled = MutableStateFlow(false)
+    val isAutoPlateEnabled: StateFlow<Boolean> = _isAutoPlateEnabled.asStateFlow()
+
+    fun setAutoPlateEnabled(enabled: Boolean) {
+        _isAutoPlateEnabled.value = enabled
+    }
+
+    // WhatsApp group auto-respond (auto-send "Me interesa {code}")
+    private val _isGroupAutoRespondEnabled = MutableStateFlow(false)
+    val isGroupAutoRespondEnabled: StateFlow<Boolean> = _isGroupAutoRespondEnabled.asStateFlow()
+
+    fun setGroupAutoRespondEnabled(enabled: Boolean) {
+        _isGroupAutoRespondEnabled.value = enabled
     }
 }

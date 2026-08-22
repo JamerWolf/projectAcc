@@ -1,9 +1,22 @@
 package com.example.projectacc
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.os.Bundle
 import android.view.accessibility.AccessibilityEvent
 import android.accessibilityservice.AccessibilityService
 import android.util.Log
 import android.view.accessibility.AccessibilityNodeInfo
+import com.example.projectacc.floating.FloatingPopupManager
+import com.example.projectacc.model.WhatsAppService
+import com.example.projectacc.parser.WhatsAppParser
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Modelo de datos para representar una orden de Picap capturada.
@@ -20,6 +33,14 @@ data class PicapOrder(
 @Suppress("DEPRECATION")
 class MyAccessibilityService : AccessibilityService() {
     private val TAG = "MyAccessibilityService"
+
+    companion object {
+        var instance: MyAccessibilityService? = null
+            private set
+    }
+
+    private var floatingPopup: FloatingPopupManager? = null
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     
     // Almacena el último porcentaje detectado para evitar logs repetitivos de la misma barra
     private var lastPercentage: Int = -1
@@ -34,80 +55,293 @@ class MyAccessibilityService : AccessibilityService() {
     private var lastClickTime: Long = 0L
     private val CLICK_COOLDOWN_MS = 2000L
 
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (event != null && event.packageName == "co.picap.passenger") {
-            val rootNode = rootInActiveWindow ?: return
+    // WhatsApp auto-plate cooldown
+    private var lastAutoPlateTime: Long = 0L
+    private val AUTO_PLATE_COOLDOWN_MS = 3000L
 
-            // --- MODO AUTO-CLIC EN LISTA ---
-            if (OrderStateManager.isAutoClickEnabled.value) {
-                if (findAndClickEstimatedPrice(rootNode)) {
-                    Log.d(TAG, "AUTOCLICK: Orden capturada! Desactivando modo auto-clic.")
-                    OrderStateManager.setAutoClickEnabled(false)
-                    hasScannedInitially = false
+    // Plate request patterns for auto-plate
+    private val plateRequestPatterns = listOf("placa", "vehiculo", "vehículo", "ascopec", "tarjeta de propietario")
+
+    override fun onCreate() {
+        super.onCreate()
+        instance = this
+        floatingPopup = FloatingPopupManager(this)
+    }
+
+    override fun onDestroy() {
+        serviceScope.cancel()
+        floatingPopup?.dismiss()
+        floatingPopup = null
+        instance = null
+        super.onDestroy()
+    }
+
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        if (event == null) return
+        val packageName = event.packageName?.toString() ?: return
+
+        // === PICAP HANDLING ===
+        if (packageName == "co.picap.passenger") {
+            handlePicapEvent(event)
+            return
+        }
+
+        // === WHATSAPP HANDLING ===
+        if (packageName == "com.whatsapp" || packageName == "com.whatsapp.w4b") {
+            handleWhatsAppEvent(event)
+            return
+        }
+    }
+
+    private fun handlePicapEvent(event: AccessibilityEvent) {
+        val rootNode = rootInActiveWindow ?: return
+
+        // --- MODO AUTO-CLIC EN LISTA ---
+        if (OrderStateManager.isAutoClickEnabled.value) {
+            if (findAndClickEstimatedPrice(rootNode)) {
+                Log.d(TAG, "AUTOCLICK: Orden capturada! Desactivando modo auto-clic.")
+                OrderStateManager.setAutoClickEnabled(false)
+                hasScannedInitially = false
+                rootNode.recycle()
+                return
+            }
+        }
+        
+        val currentPercentage = findPercentage(rootNode)
+
+        // Lógica de filtrado por porcentaje:
+        if (currentPercentage != null) {
+            if (currentPercentage < lastPercentage) {
+                lastPercentage = currentPercentage
+                rootNode.recycle()
+                return 
+            }
+            lastPercentage = currentPercentage
+        } else {
+            lastPercentage = -1
+        }
+
+        // 1. GENERAR EL LOG VISUAL DEL ÁRBOL
+        val treeBuilder = StringBuilder()
+        treeBuilder.append("\n╔════════════ ARBOL DE NODOS (PICAP) ════════════╗\n")
+        generateTreeLog(rootNode, treeBuilder, 0)
+        treeBuilder.append("╚═════════════════════════════════════════════════╝")
+        Log.d(TAG, treeBuilder.toString())
+
+        // 2. EXTRAER DATOS PARA EL MODELO ORDER
+        val nodesContent = mutableListOf<String>()
+        flattenContentDescriptions(rootNode, nodesContent)
+        val order = parseOrder(nodesContent)
+
+        // --- AUTO-ACCEPT: Evaluar siempre que haya ID, sin importar si es la misma orden ---
+        if (order.id.isNotEmpty() && shouldAutoAccept(order)) {
+            val now = System.currentTimeMillis()
+            if (now - lastClickTime >= CLICK_COOLDOWN_MS) {
+                Log.d(TAG, "AUTO-ACCEPT: Orden califica para auto-acept. Buscando botón...")
+                if (findAndClickAcceptButton(rootNode)) {
+                    lastClickTime = System.currentTimeMillis()
+                    Log.i(TAG, "AUTO-ACCEPT: Orden auto-aceptada! No se mostrara en UI.")
                     rootNode.recycle()
                     return
                 }
-            }
-            
-            val currentPercentage = findPercentage(rootNode)
-
-            // Lógica de filtrado por porcentaje:
-            if (currentPercentage != null) {
-                if (currentPercentage < lastPercentage) {
-                    lastPercentage = currentPercentage
-                    rootNode.recycle()
-                    return 
-                }
-                lastPercentage = currentPercentage
             } else {
-                lastPercentage = -1
+                Log.d(TAG, "AUTO-ACCEPT: En cooldown, esperando...")
             }
+        }
 
-            // 1. GENERAR EL LOG VISUAL DEL ÁRBOL
-            val treeBuilder = StringBuilder()
-            treeBuilder.append("\n╔════════════ ARBOL DE NODOS (PICAP) ════════════╗\n")
-            generateTreeLog(rootNode, treeBuilder, 0)
-            treeBuilder.append("╚═════════════════════════════════════════════════╝")
-            Log.d(TAG, treeBuilder.toString())
+        // Actualizar UI solo si es una orden nueva basada en el ID
+        if (order.id.isNotEmpty() && order.id != lastOrder?.id) {
+            lastOrder = order
+            OrderStateManager.setOrder(order)
 
-            // 2. EXTRAER DATOS PARA EL MODELO ORDER
-            val nodesContent = mutableListOf<String>()
-            flattenContentDescriptions(rootNode, nodesContent)
-            val order = parseOrder(nodesContent)
+            val summary = """
+                
+                ORDEN CAPTURADA [#${order.id}]:
+                Ganancia: ${order.ganancia}
+                Recogida: ${order.direccionRecogida} (${order.tiempoRecogida})
+                Entrega:  ${order.direccionEntrega} (${order.tiempoEntrega})
+            """.trimIndent()
+            Log.i(TAG, summary)
+        }
 
-            // --- AUTO-ACCEPT: Evaluar siempre que haya ID, sin importar si es la misma orden ---
-            if (order.id.isNotEmpty() && shouldAutoAccept(order)) {
-                val now = System.currentTimeMillis()
-                if (now - lastClickTime >= CLICK_COOLDOWN_MS) {
-                    Log.d(TAG, "AUTO-ACCEPT: Orden califica para auto-acept. Buscando botón...")
-                    if (findAndClickAcceptButton(rootNode)) {
-                        lastClickTime = System.currentTimeMillis()
-                        Log.i(TAG, "AUTO-ACCEPT: ✅ Orden auto-aceptada! No se mostrará en UI.")
-                        rootNode.recycle()
-                        return  // No guardamos la orden en la UI porque ya se aceptó
-                    }
-                } else {
-                    Log.d(TAG, "AUTO-ACCEPT: En cooldown, esperando... (${CLICK_COOLDOWN_MS - (now - lastClickTime)}ms restantes)")
+        rootNode.recycle()
+    }
+
+    private fun handleWhatsAppEvent(event: AccessibilityEvent) {
+        val rootNode = rootInActiveWindow ?: return
+
+        // Extract text on main thread (fast - just reads node properties)
+        val fullText = extractAllText(rootNode)
+        rootNode.recycle()
+
+        // Process on background thread (parsing + popup)
+        serviceScope.launch {
+            processWhatsAppText(fullText)
+        }
+    }
+
+    private suspend fun processWhatsAppText(fullText: String) {
+        if (fullText.isEmpty()) return
+
+        Log.d(TAG, "WHATSAPP: Procesando texto en background (${fullText.length} chars)")
+
+        // Parse on background thread
+        val service = WhatsAppParser.parse(fullText) ?: return
+
+        // Check if already scanned
+        val scannedIds = OrderStateManager.scannedWhatsAppServiceIds.value
+        if (scannedIds.contains(service.id)) {
+            Log.d(TAG, "WHATSAPP: Servicio #${service.id} ya escaneado. Ignorando.")
+            return
+        }
+
+        // New service detected
+        Log.d(TAG, "WHATSAPP: Servicio detectado #${service.id} - ${service.empresa}")
+        OrderStateManager.setWhatsAppOrder(service)
+        OrderStateManager.addScannedWhatsAppServiceId(service.id)
+
+        // Show floating popup (post to main thread for UI)
+        if (floatingPopup?.canDrawOverlays() == true) {
+            withContext(Dispatchers.Main) {
+                floatingPopup?.show(service) { acceptedService ->
+                    pasteAndSend("Me interesa ${acceptedService.id}")
                 }
             }
-
-            // Actualizar UI solo si es una orden nueva basada en el ID
-            if (order.id.isNotEmpty() && order.id != lastOrder?.id) {
-                lastOrder = order
-                OrderStateManager.setOrder(order)
-
-                val summary = """
-                    
-                    📦 ORDEN CAPTURADA [#${order.id}]:
-                    💰 Ganancia: ${order.ganancia}
-                    📍 Recogida: ${order.direccionRecogida} (${order.tiempoRecogida})
-                    🏁 Entrega:  ${order.direccionEntrega} (${order.tiempoEntrega})
-                """.trimIndent()
-                Log.i(TAG, summary)
-            }
-
-            rootNode.recycle()
+            return
         }
+
+        // Auto-plate: detect plate request in private messages
+        if (OrderStateManager.isAutoPlateEnabled.value) {
+            val plate = OrderStateManager.vehiclePlate.value
+            if (plate.isNotEmpty()) {
+                val lowerText = fullText.lowercase()
+                val isPlateRequest = plateRequestPatterns.any { pattern -> lowerText.contains(pattern) }
+                if (isPlateRequest) {
+                    val now = System.currentTimeMillis()
+                    if (now - lastAutoPlateTime >= AUTO_PLATE_COOLDOWN_MS) {
+                        Log.d(TAG, "WHATSAPP: Solicitud de placa detectada. Pegando placa: $plate")
+                        lastAutoPlateTime = now
+                        withContext(Dispatchers.Main) {
+                            pasteAndSend(plate)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun extractAllText(node: AccessibilityNodeInfo?): String {
+        if (node == null) return ""
+        val sb = StringBuilder()
+        extractTextRecursive(node, sb)
+        return sb.toString()
+    }
+
+    private fun extractTextRecursive(node: AccessibilityNodeInfo, sb: StringBuilder) {
+        val text = node.text?.toString() ?: ""
+        if (text.isNotEmpty()) {
+            sb.appendLine(text)
+        }
+        val cd = node.contentDescription?.toString() ?: ""
+        if (cd.isNotEmpty() && cd != text) {
+            sb.appendLine(cd)
+        }
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i)
+            if (child != null) {
+                extractTextRecursive(child, sb)
+                child.recycle()
+            }
+        }
+    }
+
+    /**
+     * Copies text to clipboard, then performs paste + send on the current WhatsApp input.
+     */
+    private fun pasteAndSend(text: String) {
+        try {
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            val clip = ClipData.newPlainText("whatsapp_response", text)
+            clipboard.setPrimaryClip(clip)
+
+            val rootNode = rootInActiveWindow ?: return
+
+            // Find the text input field (WhatsApp uses EditText for message input)
+            val inputNode = findEditText(rootNode)
+            if (inputNode != null) {
+                // Focus the input
+                inputNode.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+
+                // Paste using clipboard
+                val pasteBundle = Bundle().apply {
+                    putBoolean("android.view.accessibility.accessibilityNodeInfo.actionArguments.pasteKey", true)
+                }
+                inputNode.performAction(AccessibilityNodeInfo.ACTION_PASTE, pasteBundle)
+
+                Log.d(TAG, "WHATSAPP: Texto pegado: $text")
+
+                // Small delay then click send
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                    val root = rootInActiveWindow ?: return@postDelayed
+                    val sendBtn = findSendButton(root)
+                    if (sendBtn != null) {
+                        sendBtn.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                        Log.d(TAG, "WHATSAPP: Mensaje enviado: $text")
+                        sendBtn.recycle()
+                    } else {
+                        Log.w(TAG, "WHATSAPP: Boton de envio no encontrado")
+                    }
+                    root.recycle()
+                }, 300)
+            } else {
+                Log.w(TAG, "WHATSAPP: Campo de texto no encontrado")
+            }
+            rootNode.recycle()
+        } catch (e: Exception) {
+            Log.e(TAG, "WHATSAPP: Error en pasteAndSend: ${e.message}")
+        }
+    }
+
+    private fun findEditText(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        val className = node.className?.toString() ?: ""
+        if (className.contains("EditText") || className.contains("Input")) {
+            return node
+        }
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            val found = findEditText(child)
+            if (found != null) return found
+            child.recycle()
+        }
+        return null
+    }
+
+    private fun findSendButton(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        val cd = node.contentDescription?.toString() ?: ""
+        val text = node.text?.toString() ?: ""
+        val id = node.viewIdResourceName ?: ""
+
+        if (cd.contains("Enviar", ignoreCase = true) || cd.contains("Send", ignoreCase = true) ||
+            text.contains("Enviar", ignoreCase = true) || text.contains("Send", ignoreCase = true) ||
+            id.contains("send", ignoreCase = true)
+        ) {
+            if (node.isClickable) return node
+            // Try parent
+            val parent = node.parent
+            if (parent != null && parent.isClickable) {
+                val result = parent
+                parent.recycle()
+                return result
+            }
+        }
+
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            val found = findSendButton(child)
+            if (found != null) return found
+            child.recycle()
+        }
+        return null
     }
 
     /**
