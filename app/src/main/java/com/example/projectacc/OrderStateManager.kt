@@ -133,4 +133,28 @@ object OrderStateManager {
     fun setGroupAutoRespondEnabled(enabled: Boolean) {
         _isGroupAutoRespondEnabled.value = enabled
     }
+
+    // Pending WhatsApp action from notification (needs to open WhatsApp first)
+    private val _pendingWhatsAppAction = MutableStateFlow<PendingWhatsAppAction?>(null)
+    val pendingWhatsAppAction: StateFlow<PendingWhatsAppAction?> = _pendingWhatsAppAction.asStateFlow()
+
+    fun setPendingWhatsAppAction(action: PendingWhatsAppAction) {
+        _pendingWhatsAppAction.value = action
+    }
+
+    fun clearPendingWhatsAppAction() {
+        _pendingWhatsAppAction.value = null
+    }
 }
+
+/**
+ * Represents a pending WhatsApp action that was triggered from a notification.
+ * @param service The service data
+ * @param needsOpenChat If true, need to open WhatsApp first before pasting
+ * @param chatPackage The WhatsApp package to open (com.whatsapp or com.whatsapp.w4b)
+ */
+data class PendingWhatsAppAction(
+    val service: WhatsAppService,
+    val needsOpenChat: Boolean = true,
+    val chatPackage: String = "com.whatsapp"
+)

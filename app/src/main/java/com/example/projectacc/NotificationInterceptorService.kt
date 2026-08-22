@@ -121,6 +121,15 @@ class NotificationInterceptorService : NotificationListenerService() {
             OrderStateManager.setWhatsAppOrder(service)
             OrderStateManager.addScannedWhatsAppServiceId(service.id)
 
+            // Guardar acción pendiente (necesita abrir WhatsApp)
+            OrderStateManager.setPendingWhatsAppAction(
+                PendingWhatsAppAction(
+                    service = service,
+                    needsOpenChat = true,
+                    chatPackage = sbn.packageName
+                )
+            )
+
             // Mostrar popup flotante directamente desde la notificación
             if (floatingPopup?.canDrawOverlays() == true) {
                 floatingPopup?.show(service) { acceptedService ->
