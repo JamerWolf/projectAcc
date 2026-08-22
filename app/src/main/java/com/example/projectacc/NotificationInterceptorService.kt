@@ -66,12 +66,6 @@ class NotificationInterceptorService : NotificationListenerService() {
     }
 
     private fun handleWhatsAppNotification(sbn: StatusBarNotification) {
-        // Solo procesar si auto-placa está habilitado
-        if (!OrderStateManager.isAutoPlateEnabled.value) return
-
-        val plate = OrderStateManager.vehiclePlate.value
-        if (plate.isEmpty()) return
-
         val notification = sbn.notification
         val extras = notification.extras
 
@@ -82,23 +76,39 @@ class NotificationInterceptorService : NotificationListenerService() {
         val fullText = "$title $text".lowercase()
         Log.d(TAG, "WhatsApp notificación: titulo='$title', texto='$text'")
 
-        // Verificar si contiene patrón de solicitud de placa
-        val isPlateRequest = plateRequestPatterns.any { pattern -> fullText.contains(pattern) }
-        if (!isPlateRequest) return
+        // 1. AUTO-PLACA: Detectar solicitud de placa en chat privado
+        if (OrderStateManager.isAutoPlateEnabled.value) {
+            val plate = OrderStateManager.vehiclePlate.value
+            if (plate.isNotEmpty()) {
+                val isPlateRequest = plateRequestPatterns.any { pattern -> fullText.contains(pattern) }
+                if (isPlateRequest) {
+                    Log.d(TAG, "AUTO-PLACA: Solicitud de placa detectada. Abriendo chat...")
+                    clickNotification(notification)
+                    return
+                }
+            }
+        }
 
-        Log.d(TAG, "AUTO-PLACA: Solicitud de placa detectada en notificación. Abriendo chat...")
+        // 2. AUTO-SERVICIO: Detectar notificación de servicio en grupo y abrir chat
+        val isServiceNotification = fullText.contains("servicio") &&
+                (fullText.contains("origen") || fullText.contains("destino") || fullText.contains("precio") || fullText.contains("ganancia"))
+        if (isServiceNotification) {
+            Log.d(TAG, "AUTO-SERVICIO: Notificación de servicio detectada. Abriendo chat...")
+            clickNotification(notification)
+        }
+    }
 
-        // Abrir el chat haciendo clic en la notificación
+    private fun clickNotification(notification: android.app.Notification) {
         try {
             val contentIntent = notification.contentIntent
             if (contentIntent != null) {
                 contentIntent.send()
-                Log.d(TAG, "AUTO-PLACA: Chat abierto. La placa se pegará automáticamente.")
+                Log.d(TAG, "Notificación clickeada exitosamente.")
             } else {
-                Log.w(TAG, "AUTO-PLACA: La notificación no tiene contentIntent.")
+                Log.w(TAG, "La notificación no tiene contentIntent.")
             }
         } catch (e: Exception) {
-            Log.e(TAG, "AUTO-PLACA: Error al abrir chat: ${e.message}")
+            Log.e(TAG, "Error al clickear notificación: ${e.message}")
         }
     }
 
