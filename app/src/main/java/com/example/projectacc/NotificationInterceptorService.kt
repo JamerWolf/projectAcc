@@ -118,15 +118,29 @@ class NotificationInterceptorService : NotificationListenerService() {
             OrderStateManager.addScannedWhatsAppServiceId(service.id)
 
             if (floatingPopup?.canDrawOverlays() == true) {
+                // Save the PendingIntent NOW (before user accepts)
+                val savedContentIntent = notification.contentIntent
+
                 floatingPopup?.show(service) { acceptedService ->
                     Log.d(TAG, "AUTO-SERVICIO: Popup aceptado para servicio #${acceptedService.id}")
-                    // Copy "Me interesa {id}" to clipboard
+
+                    // 1. Copy "Me interesa {id}" to clipboard
                     val clipboard = getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                     val clip = android.content.ClipData.newPlainText("whatsapp_response", "Me interesa ${acceptedService.id}")
                     clipboard.setPrimaryClip(clip)
                     Log.d(TAG, "AUTO-SERVICIO: Texto copiado al portapapeles")
-                    // Open the chat
-                    clickNotification(notification)
+
+                    // 2. Open the specific chat via saved PendingIntent
+                    if (savedContentIntent != null) {
+                        try {
+                            savedContentIntent.send()
+                            Log.d(TAG, "AUTO-SERVICIO: Chat abierto via contentIntent")
+                        } catch (e: Exception) {
+                            Log.e(TAG, "AUTO-SERVICIO: Error al abrir chat: ${e.message}")
+                        }
+                    } else {
+                        Log.w(TAG, "AUTO-SERVICIO: contentIntent es null")
+                    }
                 }
             }
         }
