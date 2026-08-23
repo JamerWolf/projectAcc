@@ -84,11 +84,7 @@ class MyAccessibilityService : AccessibilityService() {
     private var lastClickTime: Long = 0L
     private val CLICK_COOLDOWN_MS = 2000L
 
-    // WhatsApp auto-plate cooldown
-    private var lastAutoPlateTime: Long = 0L
-    private val AUTO_PLATE_COOLDOWN_MS = 3000L
-
-    // Plate request patterns for auto-plate
+    // Plate request patterns for response detection
     private val plateRequestPatterns = listOf("placa", "vehiculo", "vehículo", "ascopec", "tarjeta de propietario")
 
     override fun onCreate() {
@@ -217,47 +213,33 @@ class MyAccessibilityService : AccessibilityService() {
 
         Log.d(TAG, "WHATSAPP: Procesando texto en background (${fullText.length} chars)")
 
-        // 0. SKIP RESPONSE MESSAGES: These contain service data but are NOT offers
+        // 0. SKIP RESPONSE MESSAGES and PLATE REQUESTS
+        // Plate requests are handled by NotificationInterceptorService + WhatsAppForwardActivity
         val lowerText = fullText.lowercase()
+        if (lowerText.contains("placa")) {
+            Log.d(TAG, "WHATSAPP: Mensaje contiene 'placa'. Manejado por notificación.")
+            return
+        }
+
         val isResponse = responsePatterns.any { pattern -> lowerText.contains(pattern) }
         if (isResponse) {
             Log.d(TAG, "WHATSAPP: Mensaje de respuesta detectado. Ignorando parser de servicios.")
         }
 
-        // 1. AUTO-PLATE: Paste plate WITHOUT sending (user reviews and sends manually)
-        if (OrderStateManager.isAutoPlateEnabled.value) {
-            val plate = OrderStateManager.vehiclePlate.value
-            if (plate.isNotEmpty()) {
-                val isPlateRequest = plateRequestPatterns.any { pattern -> lowerText.contains(pattern) }
-                if (isPlateRequest) {
-                    // Extract service ID from "🏷️ Servicio {id}" pattern
-                    val serviceId = Regex("🏷️\\s*Servicio\\s+(\\d+)").find(fullText)?.groupValues?.get(1)
+        // 1. AUTO-PLATE: Disabled here - handled by NotificationInterceptorService
+        // If we reach here, it's NOT a plate request
 
-                    // Check if plate was already sent for this service
-                    if (serviceId != null && OrderStateManager.isServicePlated(serviceId)) {
-                        Log.d(TAG, "WHATSAPP: Placa ya enviada para servicio #$serviceId. Ignorando.")
-                        return
-                    }
-
-                    val now = System.currentTimeMillis()
-                    if (now - lastAutoPlateTime >= AUTO_PLATE_COOLDOWN_MS) {
-                        Log.d(TAG, "WHATSAPP: Solicitud de placa detectada para servicio #$serviceId. Pegando placa (sin enviar): $plate")
-                        lastAutoPlateTime = now
-                        // Mark this service as plated
-                        if (serviceId != null) {
-                            OrderStateManager.addPlatedServiceId(serviceId)
-                        }
-                        withContext(Dispatchers.Main) {
-                            pasteOnly(plate)
-                        }
-                        return
-                    }
-                }
-            }
+        // 2. SERVICE MESSAGE: Only if switch is enabled
+        if (isResponse) return
+        if (lowerText.contains("placa")) {
+            Log.d(TAG, "WHATSAPP: Mensaje contiene 'placa'. No es oferta de servicio.")
+            return
         }
 
-        // 2. SERVICE MESSAGE: Parse and show floating popup (skip if it's a response)
-        if (isResponse) return
+        if (!OrderStateManager.isGroupAutoRespondEnabled.value) {
+            Log.d(TAG, "WHATSAPP: Switch Auto-Responder desactivado. Ignorando.")
+            return
+        }
 
         val service = WhatsAppParser.parse(fullText) ?: return
 
@@ -311,7 +293,8 @@ class MyAccessibilityService : AccessibilityService() {
     /**
      * Copies text to clipboard, then performs paste + send on the current WhatsApp input.
      */
-    private fun pasteAndSend(text: String) {
+    fun pasteAndSend(text: String) {
+        Log.d(TAG, "WHATSAPP: pasteAndSend called: $text")
         try {
             val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             val clip = ClipData.newPlainText("whatsapp_response", text)
@@ -319,21 +302,15 @@ class MyAccessibilityService : AccessibilityService() {
 
             val rootNode = rootInActiveWindow ?: return
 
-            // Find the text input field (WhatsApp uses EditText for message input)
             val inputNode = findEditText(rootNode)
             if (inputNode != null) {
-                // Focus the input
                 inputNode.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
-
-                // Paste using clipboard
                 val pasteBundle = Bundle().apply {
                     putBoolean("android.view.accessibility.accessibilityNodeInfo.actionArguments.pasteKey", true)
                 }
                 inputNode.performAction(AccessibilityNodeInfo.ACTION_PASTE, pasteBundle)
-
                 Log.d(TAG, "WHATSAPP: Texto pegado: $text")
 
-                // Small delay then click send
                 android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                     val root = rootInActiveWindow ?: return@postDelayed
                     val sendBtn = findSendButton(root)
@@ -353,6 +330,16 @@ class MyAccessibilityService : AccessibilityService() {
         } catch (e: Exception) {
             Log.e(TAG, "WHATSAPP: Error en pasteAndSend: ${e.message}")
         }
+    }
+
+    /**
+     * Checks if there's a text input field in the current window.
+     */
+    fun hasTextInput(): Boolean {
+        val rootNode = rootInActiveWindow ?: return false
+        val found = findEditText(rootNode)
+        rootNode.recycle()
+        return found != null
     }
 
     private fun findEditText(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {

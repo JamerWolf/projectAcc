@@ -1,5 +1,8 @@
 package com.example.projectacc
 
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
@@ -25,16 +28,13 @@ class NotificationInterceptorService : NotificationListenerService() {
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         sbn ?: return
-
         val packageName = sbn.packageName
 
-        // === PICAP HANDLING ===
         if (packageName == "co.picap.passenger" || packageName == "co.picap.driver" || packageName == "co.picap.picap_pro") {
             handlePicapNotification(sbn)
             return
         }
 
-        // === WHATSAPP HANDLING ===
         if (packageName == "com.whatsapp" || packageName == "com.whatsapp.w4b") {
             handleWhatsAppNotification(sbn)
             return
@@ -48,9 +48,7 @@ class NotificationInterceptorService : NotificationListenerService() {
 
         Log.d(TAG, "Notificación de Picap: titulo='$title'")
 
-        if (!title.startsWith("Nuevo servicio", ignoreCase = true)) {
-            return
-        }
+        if (!title.startsWith("Nuevo servicio", ignoreCase = true)) return
 
         if (!OrderStateManager.isNotificationClickEnabled.value) {
             Log.d(TAG, "Switch de notificaciones DESACTIVADO. Ignorando.")
@@ -72,7 +70,6 @@ class NotificationInterceptorService : NotificationListenerService() {
         }
 
         OrderStateManager.setNotificationClickEnabled(false)
-        Log.d(TAG, "AUTOCLICK: Switch de notificaciones desactivado automáticamente.")
     }
 
     private fun handleWhatsAppNotification(sbn: StatusBarNotification) {
@@ -86,24 +83,48 @@ class NotificationInterceptorService : NotificationListenerService() {
         val lowerText = fullText.lowercase()
         Log.d(TAG, "WhatsApp notificación: titulo='$title', texto='$text'")
 
-        // 1. AUTO-PLACA: Detectar solicitud de placa en chat privado
+        // 1. AUTO-PLACA
         if (OrderStateManager.isAutoPlateEnabled.value) {
             val plate = OrderStateManager.vehiclePlate.value
             if (plate.isNotEmpty()) {
                 val isPlateRequest = plateRequestPatterns.any { pattern -> lowerText.contains(pattern) }
                 if (isPlateRequest) {
-                    Log.d(TAG, "AUTO-PLACA: Solicitud de placa detectada. Copiando placa al portapapeles...")
-                    // Copy plate to clipboard - user will paste manually after opening chat
-                    val clipboard = getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    Log.d(TAG, "AUTO-PLACA: Solicitud de placa detectada. Abriendo chat y pegando placa...")
+
+                    // Copy plate to clipboard
+                    val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                     val clip = android.content.ClipData.newPlainText("whatsapp_response", plate)
                     clipboard.setPrimaryClip(clip)
-                    clickNotification(notification)
+
+                    // Save PendingIntent and launch forward activity (paste ONLY, no send)
+                    val savedContentIntent = notification.contentIntent
+                    if (savedContentIntent != null) {
+                        WhatsAppIntentHolder.pendingIntent = savedContentIntent
+                        WhatsAppIntentHolder.lastCopiedText = plate
+                        val forwardIntent = Intent(this, WhatsAppForwardActivity::class.java).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            putExtra(WhatsAppForwardActivity.EXTRA_AUTO_SEND, false)
+                        }
+                        startActivity(forwardIntent)
+                        Log.d(TAG, "AUTO-PLACA: WhatsAppForwardActivity lanzada (solo pegar)")
+                    }
                     return
                 }
             }
         }
 
-        // 2. AUTO-SERVICIO: Detectar notificación de servicio en grupo
+        // Si el mensaje contiene "placa", NO es una oferta de servicio - ignorar
+        if (lowerText.contains("placa")) {
+            Log.d(TAG, "Mensaje contiene 'placa'. No es oferta de servicio. Ignorando.")
+            return
+        }
+
+        // 2. AUTO-SERVICIO - Only if switch is enabled
+        if (!OrderStateManager.isGroupAutoRespondEnabled.value) {
+            Log.d(TAG, "AUTO-SERVICIO: Switch desactivado. Ignorando servicio.")
+            return
+        }
+
         val service = WhatsAppParser.parse(fullText)
         if (service != null) {
             val scannedIds = OrderStateManager.scannedWhatsAppServiceIds.value
@@ -112,34 +133,32 @@ class NotificationInterceptorService : NotificationListenerService() {
                 return
             }
 
-            Log.d(TAG, "AUTO-SERVICIO: Servicio #${service.id} detectado en notificación. Mostrando popup...")
+            Log.d(TAG, "AUTO-SERVICIO: Servicio #${service.id} detectado. Mostrando popup...")
 
             OrderStateManager.setWhatsAppOrder(service)
             OrderStateManager.addScannedWhatsAppServiceId(service.id)
 
             if (floatingPopup?.canDrawOverlays() == true) {
-                // Save the PendingIntent NOW (before user accepts)
                 val savedContentIntent = notification.contentIntent
 
                 floatingPopup?.show(service) { acceptedService ->
-                    Log.d(TAG, "AUTO-SERVICIO: Popup aceptado para servicio #${acceptedService.id}")
+                    Log.d(TAG, "AUTO-SERVICIO: Popup aceptado para #${acceptedService.id}")
 
-                    // 1. Copy "Me interesa {id}" to clipboard
-                    val clipboard = getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                    val clip = android.content.ClipData.newPlainText("whatsapp_response", "Me interesa ${acceptedService.id}")
+                    val textToPaste = "Me interesa ${acceptedService.id}"
+
+                    // 1. Copiar al portapapeles
+                    val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    val clip = android.content.ClipData.newPlainText("whatsapp_response", textToPaste)
                     clipboard.setPrimaryClip(clip)
-                    Log.d(TAG, "AUTO-SERVICIO: Texto copiado al portapapeles")
 
-                    // 2. Open the specific chat via saved PendingIntent
+                    // 2. Guardar PendingIntent y texto, abrir WhatsApp
                     if (savedContentIntent != null) {
-                        try {
-                            savedContentIntent.send()
-                            Log.d(TAG, "AUTO-SERVICIO: Chat abierto via contentIntent")
-                        } catch (e: Exception) {
-                            Log.e(TAG, "AUTO-SERVICIO: Error al abrir chat: ${e.message}")
-                        }
-                    } else {
-                        Log.w(TAG, "AUTO-SERVICIO: contentIntent es null")
+                        WhatsAppIntentHolder.pendingIntent = savedContentIntent
+                        WhatsAppIntentHolder.lastCopiedText = textToPaste
+                        val forwardIntent = Intent(this, WhatsAppForwardActivity::class.java)
+                        forwardIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        startActivity(forwardIntent)
+                        Log.d(TAG, "AUTO-SERVICIO: WhatsAppForwardActivity lanzada")
                     }
                 }
             }
@@ -160,7 +179,5 @@ class NotificationInterceptorService : NotificationListenerService() {
         }
     }
 
-    override fun onNotificationRemoved(sbn: StatusBarNotification?) {
-        // No necesitamos hacer nada al eliminar notificaciones
-    }
+    override fun onNotificationRemoved(sbn: StatusBarNotification?) {}
 }

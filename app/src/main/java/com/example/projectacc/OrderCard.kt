@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -68,6 +69,7 @@ private fun PicapOrderCard(order: PicapOrder, onDismiss: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .wrapContentHeight()
             .padding(16.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
         colors = CardDefaults.cardColors(
@@ -190,6 +192,7 @@ private fun WhatsAppOrderCard(service: WhatsAppService, onDismiss: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .wrapContentHeight()
             .padding(16.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
         colors = CardDefaults.cardColors(
