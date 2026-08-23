@@ -18,8 +18,8 @@ data class WhatsAppService(
      * If no "Medio de pago" found, returns null.
      */
     fun medioDePagoFormatted(): String? {
-        val match = Regex("Medio de pago:\\s*(.+)", RegexOption.IGNORE_CASE).find(requisitos) ?: return null
-        val medioDePago = match.groupValues[1].trimEnd(' ', '.')
+        val match = Regex("Medio de pago:\\s*([^.,]+)", RegexOption.IGNORE_CASE).find(requisitos) ?: return null
+        val medioDePago = match.groupValues[1].trim()
 
         val valor = extractValor() ?: return null
         val formattedValor = formatNumber(valor)
@@ -52,7 +52,11 @@ data class WhatsAppService(
     }
 
     fun needsReturnIcon(): Boolean {
+        // Si el medio de pago es prepagado, NUNCA mostrar ícono de retorno
+        val lowerPago = pago.lowercase()
         val lowerRequisitos = requisitos.lowercase()
+        if (lowerPago.contains("prepagado") || lowerRequisitos.contains("prepagado")) return false
+
         if (lowerRequisitos.contains("datafono") || lowerRequisitos.contains("datáfono")) return true
         if (lowerRequisitos.contains("cadena de frio") || lowerRequisitos.contains("cadena de frío")) return true
         if (lowerRequisitos.contains("caba")) return true
