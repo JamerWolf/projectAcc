@@ -48,12 +48,10 @@ class NotificationInterceptorService : NotificationListenerService() {
 
         Log.d(TAG, "Notificación de Picap: titulo='$title'")
 
-        // Solo reaccionar si el título empieza con "Nuevo servicio"
         if (!title.startsWith("Nuevo servicio", ignoreCase = true)) {
             return
         }
 
-        // Verificar si el switch está activado
         if (!OrderStateManager.isNotificationClickEnabled.value) {
             Log.d(TAG, "Switch de notificaciones DESACTIVADO. Ignorando.")
             return
@@ -61,7 +59,6 @@ class NotificationInterceptorService : NotificationListenerService() {
 
         Log.d(TAG, "AUTOCLICK: Detectada notificación 'Nuevo servicio'. Ejecutando clic...")
 
-        // Ejecutar el contentIntent de la notificación (abre Picap en el popup de la orden)
         try {
             val contentIntent = notification.contentIntent
             if (contentIntent != null) {
@@ -74,7 +71,6 @@ class NotificationInterceptorService : NotificationListenerService() {
             Log.e(TAG, "AUTOCLICK: Error al ejecutar contentIntent: ${e.message}")
         }
 
-        // Auto-desactivar el switch (un solo tiro)
         OrderStateManager.setNotificationClickEnabled(false)
         Log.d(TAG, "AUTOCLICK: Switch de notificaciones desactivado automáticamente.")
     }
@@ -83,7 +79,6 @@ class NotificationInterceptorService : NotificationListenerService() {
         val notification = sbn.notification
         val extras = notification.extras
 
-        // Extraer texto de la notificación
         val title = extras.getString("android.title") ?: extras.getCharSequence("android.title")?.toString() ?: ""
         val text = extras.getString("android.text") ?: extras.getCharSequence("android.text")?.toString() ?: ""
 
@@ -97,7 +92,11 @@ class NotificationInterceptorService : NotificationListenerService() {
             if (plate.isNotEmpty()) {
                 val isPlateRequest = plateRequestPatterns.any { pattern -> lowerText.contains(pattern) }
                 if (isPlateRequest) {
-                    Log.d(TAG, "AUTO-PLACA: Solicitud de placa detectada. Abriendo chat...")
+                    Log.d(TAG, "AUTO-PLACA: Solicitud de placa detectada. Copiando placa al portapapeles...")
+                    // Copy plate to clipboard - user will paste manually after opening chat
+                    val clipboard = getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    val clip = android.content.ClipData.newPlainText("whatsapp_response", plate)
+                    clipboard.setPrimaryClip(clip)
                     clickNotification(notification)
                     return
                 }
@@ -105,10 +104,8 @@ class NotificationInterceptorService : NotificationListenerService() {
         }
 
         // 2. AUTO-SERVICIO: Detectar notificación de servicio en grupo
-        // Intentar parsear el texto de la notificación como servicio
         val service = WhatsAppParser.parse(fullText)
         if (service != null) {
-            // Verificar si ya fue escaneado
             val scannedIds = OrderStateManager.scannedWhatsAppServiceIds.value
             if (scannedIds.contains(service.id)) {
                 Log.d(TAG, "AUTO-SERVICIO: Servicio #${service.id} ya escaneado. Ignorando.")
@@ -117,30 +114,19 @@ class NotificationInterceptorService : NotificationListenerService() {
 
             Log.d(TAG, "AUTO-SERVICIO: Servicio #${service.id} detectado en notificación. Mostrando popup...")
 
-            // Guardar en estado
             OrderStateManager.setWhatsAppOrder(service)
             OrderStateManager.addScannedWhatsAppServiceId(service.id)
 
-            // Guardar acción pendiente (necesita abrir WhatsApp con el chat específico)
-            OrderStateManager.setPendingWhatsAppAction(
-                PendingWhatsAppAction(
-                    service = service,
-                    needsOpenChat = true,
-                    contentIntent = notification.contentIntent
-                )
-            )
-
-            // Mostrar popup flotante directamente desde la notificación
             if (floatingPopup?.canDrawOverlays() == true) {
                 floatingPopup?.show(service) { acceptedService ->
-                    // El popup fue aceptado - pegar "Me interesa {id}"
-                    val myAccessibilityService = MyAccessibilityService.instance
-                    if (myAccessibilityService != null) {
-                        // Usar el método del servicio de accesibilidad para pegar
-                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                            MyAccessibilityService.instance?.pasteFromNotification("Me interesa ${acceptedService.id}")
-                        }, 500)
-                    }
+                    Log.d(TAG, "AUTO-SERVICIO: Popup aceptado para servicio #${acceptedService.id}")
+                    // Copy "Me interesa {id}" to clipboard
+                    val clipboard = getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    val clip = android.content.ClipData.newPlainText("whatsapp_response", "Me interesa ${acceptedService.id}")
+                    clipboard.setPrimaryClip(clip)
+                    Log.d(TAG, "AUTO-SERVICIO: Texto copiado al portapapeles")
+                    // Open the chat
+                    clickNotification(notification)
                 }
             }
         }

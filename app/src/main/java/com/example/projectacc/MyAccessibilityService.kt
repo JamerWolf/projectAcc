@@ -3,7 +3,6 @@ package com.example.projectacc
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.content.Intent
 import android.os.Bundle
 import android.view.accessibility.AccessibilityEvent
 import android.accessibilityservice.AccessibilityService
@@ -44,49 +43,31 @@ class MyAccessibilityService : AccessibilityService() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     /**
-     * Public method called by NotificationInterceptorService to paste text.
-     * If there's a pending action that needs to open WhatsApp first, it does that.
+     * Paste only - pega texto SIN enviar. Para que el usuario revise y envíe manual.
      */
-    fun pasteFromNotification(text: String) {
-        Log.d(TAG, "WHATSAPP: pasteFromNotification called: $text")
-
-        val pendingAction = OrderStateManager.pendingWhatsAppAction.value
-        if (pendingAction != null && pendingAction.needsOpenChat) {
-            // Need to open WhatsApp to the specific chat, then paste after delay
-            Log.d(TAG, "WHATSAPP: Abriendo chat de WhatsApp antes de pegar...")
-            openChatAndPaste(pendingAction.contentIntent, text)
-            OrderStateManager.clearPendingWhatsAppAction()
-        } else {
-            // WhatsApp should already be open, paste directly
-            pasteAndSend(text)
-        }
-    }
-
-    /**
-     * Opens WhatsApp to the specific chat using the notification's contentIntent,
-     * waits for it to load, then pastes text.
-     */
-    private fun openChatAndPaste(contentIntent: android.app.PendingIntent?, text: String) {
+    fun pasteOnly(text: String) {
+        Log.d(TAG, "WHATSAPP: pasteOnly called: $text")
         try {
-            if (contentIntent != null) {
-                // Use the notification's contentIntent to open the specific chat
-                contentIntent.send()
-                Log.d(TAG, "WHATSAPP: Chat abierto via contentIntent. Esperando carga...")
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            val clip = ClipData.newPlainText("whatsapp_response", text)
+            clipboard.setPrimaryClip(clip)
 
-                // Wait for WhatsApp to load, then paste
-                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                    Log.d(TAG, "WHATSAPP: Tiempo de carga completado. Pegando texto...")
-                    pasteAndSend(text)
-                }, 1500) // 1.5 seconds to load
+            val rootNode = rootInActiveWindow ?: return
+
+            val inputNode = findEditText(rootNode)
+            if (inputNode != null) {
+                inputNode.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+                val pasteBundle = Bundle().apply {
+                    putBoolean("android.view.accessibility.accessibilityNodeInfo.actionArguments.pasteKey", true)
+                }
+                inputNode.performAction(AccessibilityNodeInfo.ACTION_PASTE, pasteBundle)
+                Log.d(TAG, "WHATSAPP: Texto pegado (sin enviar): $text")
             } else {
-                // Fallback: just paste directly (WhatsApp might already be open)
-                Log.w(TAG, "WHATSAPP: No contentIntent disponible. Pegando directamente...")
-                pasteAndSend(text)
+                Log.w(TAG, "WHATSAPP: Campo de texto no encontrado en pasteOnly")
             }
+            rootNode.recycle()
         } catch (e: Exception) {
-            Log.e(TAG, "WHATSAPP: Error al abrir chat: ${e.message}")
-            // Fallback: try to paste anyway
-            pasteAndSend(text)
+            Log.e(TAG, "WHATSAPP: Error en pasteOnly: ${e.message}")
         }
     }
 
@@ -241,21 +222,33 @@ class MyAccessibilityService : AccessibilityService() {
         val isResponse = responsePatterns.any { pattern -> lowerText.contains(pattern) }
         if (isResponse) {
             Log.d(TAG, "WHATSAPP: Mensaje de respuesta detectado. Ignorando parser de servicios.")
-            // Still check for auto-plate in case it's a different response
         }
 
-        // 1. AUTO-PLATE: Check FIRST - works on any WhatsApp screen (private chats, groups)
+        // 1. AUTO-PLATE: Paste plate WITHOUT sending (user reviews and sends manually)
         if (OrderStateManager.isAutoPlateEnabled.value) {
             val plate = OrderStateManager.vehiclePlate.value
             if (plate.isNotEmpty()) {
                 val isPlateRequest = plateRequestPatterns.any { pattern -> lowerText.contains(pattern) }
                 if (isPlateRequest) {
+                    // Extract service ID from "🏷️ Servicio {id}" pattern
+                    val serviceId = Regex("🏷️\\s*Servicio\\s+(\\d+)").find(fullText)?.groupValues?.get(1)
+
+                    // Check if plate was already sent for this service
+                    if (serviceId != null && OrderStateManager.isServicePlated(serviceId)) {
+                        Log.d(TAG, "WHATSAPP: Placa ya enviada para servicio #$serviceId. Ignorando.")
+                        return
+                    }
+
                     val now = System.currentTimeMillis()
                     if (now - lastAutoPlateTime >= AUTO_PLATE_COOLDOWN_MS) {
-                        Log.d(TAG, "WHATSAPP: Solicitud de placa detectada. Pegando placa: $plate")
+                        Log.d(TAG, "WHATSAPP: Solicitud de placa detectada para servicio #$serviceId. Pegando placa (sin enviar): $plate")
                         lastAutoPlateTime = now
+                        // Mark this service as plated
+                        if (serviceId != null) {
+                            OrderStateManager.addPlatedServiceId(serviceId)
+                        }
                         withContext(Dispatchers.Main) {
-                            pasteAndSend(plate)
+                            pasteOnly(plate)
                         }
                         return
                     }

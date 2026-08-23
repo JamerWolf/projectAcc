@@ -18,6 +18,7 @@ object WhatsAppParser {
     fun parse(text: String): WhatsAppService? {
         val cleanText = text.replace("\r", "")
 
+        // Required: service ID from either "🏷️ Servicio {id}" or "Me interesa {id}"
         val idMatch = serviceIdRegex.find(cleanText) ?: lastLineIdRegex.find(cleanText)
         val id = idMatch?.groupValues?.get(1) ?: return null
 

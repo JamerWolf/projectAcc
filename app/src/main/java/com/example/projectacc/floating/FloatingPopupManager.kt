@@ -59,8 +59,11 @@ class FloatingPopupManager(private val context: Context) {
 
         // Accept button
         popupView?.findViewById<Button>(R.id.btnAccept)?.setOnClickListener {
+            android.util.Log.d("FloatingPopup", "Boton Aceptar clickeado. Invocando callback...")
             onAcceptCallback?.invoke(service)
+            android.util.Log.d("FloatingPopup", "Callback invocado. Cerrando popup...")
             dismiss()
+            android.util.Log.d("FloatingPopup", "Popup cerrado.")
         }
 
         // Close button

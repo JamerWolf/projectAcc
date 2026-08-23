@@ -100,12 +100,25 @@ object OrderStateManager {
         _scannedWhatsAppServiceIds.value = emptySet()
     }
 
+    // WhatsApp plated service IDs (services where plate was already sent)
+    private val _platedServiceIds = MutableStateFlow<Set<String>>(emptySet())
+    val platedServiceIds: StateFlow<Set<String>> = _platedServiceIds.asStateFlow()
+
+    fun addPlatedServiceId(id: String) {
+        _platedServiceIds.value = _platedServiceIds.value + id
+    }
+
+    fun isServicePlated(id: String): Boolean {
+        return _platedServiceIds.value.contains(id)
+    }
+
     /**
      * Limpia toda la cache de servicios escaneados (Picap + WhatsApp).
      */
     fun clearAllCache() {
         _scannedServiceIds.value = emptySet()
         _scannedWhatsAppServiceIds.value = emptySet()
+        _platedServiceIds.value = emptySet()
         _currentOrder.value = null
         _currentWhatsAppOrder.value = null
     }
@@ -133,28 +146,4 @@ object OrderStateManager {
     fun setGroupAutoRespondEnabled(enabled: Boolean) {
         _isGroupAutoRespondEnabled.value = enabled
     }
-
-    // Pending WhatsApp action from notification (needs to open WhatsApp first)
-    private val _pendingWhatsAppAction = MutableStateFlow<PendingWhatsAppAction?>(null)
-    val pendingWhatsAppAction: StateFlow<PendingWhatsAppAction?> = _pendingWhatsAppAction.asStateFlow()
-
-    fun setPendingWhatsAppAction(action: PendingWhatsAppAction) {
-        _pendingWhatsAppAction.value = action
-    }
-
-    fun clearPendingWhatsAppAction() {
-        _pendingWhatsAppAction.value = null
-    }
 }
-
-/**
- * Represents a pending WhatsApp action that was triggered from a notification.
- * @param service The service data
- * @param needsOpenChat If true, need to open WhatsApp first before pasting
- * @param contentIntent Optional PendingIntent to open the specific chat
- */
-data class PendingWhatsAppAction(
-    val service: com.example.projectacc.model.WhatsAppService,
-    val needsOpenChat: Boolean = true,
-    val contentIntent: android.app.PendingIntent? = null
-)
