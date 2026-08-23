@@ -331,6 +331,8 @@ private fun WhatsAppOrderCard(service: WhatsAppService, onDismiss: () -> Unit) {
                 }
             }
 
+            Spacer(modifier = Modifier.height(8.dp))
+
             // Requisitos
             if (service.requisitos.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))
@@ -344,6 +346,17 @@ private fun WhatsAppOrderCard(service: WhatsAppService, onDismiss: () -> Unit) {
                     text = service.requisitos,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            // Medio de pago formateado
+            if (service.medioDePagoFormatted() != null) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = service.medioDePagoFormatted()!!,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFFFC107)
                 )
             }
 

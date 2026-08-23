@@ -80,6 +80,15 @@ fun WhatsAppPopup(
                 if (service.requisitos.isNotEmpty()) {
                     DetailRow(label = "Requisitos", value = service.requisitos)
                 }
+                if (service.medioDePagoFormatted() != null) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = service.medioDePagoFormatted()!!,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFFFC107)
+                    )
+                }
             }
         },
         confirmButton = {

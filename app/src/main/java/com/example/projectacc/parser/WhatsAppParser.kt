@@ -12,7 +12,7 @@ object WhatsAppParser {
     private val origenRegex = Regex("📍\\s*Origen:\\s*(.+)")
     private val destinoRegex = Regex("🏁\\s*Destino:\\s*(.+)")
     private val pagoRegex = Regex("Pago:\\s*(.+)")
-    private val valorRegex = Regex("El valor a cobrar es:\\s*(.+?)\\s*\\.")
+    private val valorRegex = Regex("El valor a cobrar es:\\s*(\\d+)")
     private val requisitosRegex = Regex("Requisitos:\\s*(.+)")
 
     fun parse(text: String): WhatsAppService? {

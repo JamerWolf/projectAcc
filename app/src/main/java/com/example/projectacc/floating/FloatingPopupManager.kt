@@ -56,13 +56,9 @@ class FloatingPopupManager(private val context: Context) {
             returnIcon?.visibility = android.view.View.VISIBLE
         }
 
-        popupView?.findViewById<TextView>(R.id.tvEmpresa)?.text = service.empresa
-        popupView?.findViewById<TextView>(R.id.tvServicio)?.text = service.servicio
         popupView?.findViewById<TextView>(R.id.tvCiudad)?.text = service.ciudad
         popupView?.findViewById<TextView>(R.id.tvOrigen)?.text = service.origen
         popupView?.findViewById<TextView>(R.id.tvDestino)?.text = service.destino
-        popupView?.findViewById<TextView>(R.id.tvPago)?.text = "Pago: ${service.pago}"
-        popupView?.findViewById<TextView>(R.id.tvValor)?.text = service.valorCobrar
 
         // Requisitos - highlight yellow if return conditions met
         val tvRequisitos = popupView?.findViewById<TextView>(R.id.tvRequisitos)
@@ -76,6 +72,14 @@ class FloatingPopupManager(private val context: Context) {
         } else {
             tvRequisitosLabel?.visibility = android.view.View.GONE
             tvRequisitos?.visibility = android.view.View.GONE
+        }
+
+        // Medio de pago + valor formateado
+        val tvMedioPago = popupView?.findViewById<TextView>(R.id.tvMedioPago)
+        val medioPago = service.medioDePagoFormatted()
+        if (medioPago != null) {
+            tvMedioPago?.text = medioPago
+            tvMedioPago?.visibility = android.view.View.VISIBLE
         }
 
         // Accept button

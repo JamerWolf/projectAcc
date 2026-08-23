@@ -206,7 +206,24 @@ class MyAccessibilityService : AccessibilityService() {
     }
 
     // Patterns that indicate this is a RESPONSE message (not a service offer)
-    private val responsePatterns = listOf("genial", "asignarte", "envíame la placa", "enviame la placa", "para asignarte")
+    private val responsePatterns = listOf("genial", "asignarte", "envíame la placa", "enviame la placa")
+
+    /**
+     * Extracts the last message block from the full text.
+     * Finds the last ⚡ or "Nuevo servicio" and returns text from there.
+     */
+    private fun findLastMessageBlock(text: String): String {
+        val lastLightning = text.lastIndexOf("⚡")
+        val lastNuevoServicio = text.lastIndexOf("nuevo servicio")
+        val lastMeInteresa = text.lastIndexOf("me interesa")
+
+        val markers = listOf(lastLightning, lastNuevoServicio, lastMeInteresa).filter { it >= 0 }
+        return if (markers.isNotEmpty()) {
+            text.substring(markers.max())
+        } else {
+            text
+        }
+    }
 
     private suspend fun processWhatsAppText(fullText: String) {
         if (fullText.isEmpty()) return
@@ -214,28 +231,26 @@ class MyAccessibilityService : AccessibilityService() {
         Log.d(TAG, "WHATSAPP: Procesando texto en background (${fullText.length} chars)")
 
         // 0. SKIP RESPONSE MESSAGES and PLATE REQUESTS
-        // Plate requests are handled by NotificationInterceptorService + WhatsAppForwardActivity
         val lowerText = fullText.lowercase()
-        if (lowerText.contains("placa")) {
-            Log.d(TAG, "WHATSAPP: Mensaje contiene 'placa'. Manejado por notificación.")
+
+        // Find the LAST message block to check for response/plate patterns
+        // (don't check entire text - old messages above may trigger false positives)
+        val lastMessageBlock = findLastMessageBlock(lowerText)
+
+        if (lastMessageBlock.contains("placa")) {
+            Log.d(TAG, "WHATSAPP: Último mensaje contiene 'placa'. Manejado por notificación.")
             return
         }
 
-        val isResponse = responsePatterns.any { pattern -> lowerText.contains(pattern) }
+        val isResponse = responsePatterns.any { pattern -> lastMessageBlock.contains(pattern) }
         if (isResponse) {
-            Log.d(TAG, "WHATSAPP: Mensaje de respuesta detectado. Ignorando parser de servicios.")
+            Log.d(TAG, "WHATSAPP: Último mensaje es respuesta. Ignorando parser de servicios.")
+            return
         }
 
         // 1. AUTO-PLATE: Disabled here - handled by NotificationInterceptorService
-        // If we reach here, it's NOT a plate request
 
         // 2. SERVICE MESSAGE: Only if switch is enabled
-        if (isResponse) return
-        if (lowerText.contains("placa")) {
-            Log.d(TAG, "WHATSAPP: Mensaje contiene 'placa'. No es oferta de servicio.")
-            return
-        }
-
         if (!OrderStateManager.isGroupAutoRespondEnabled.value) {
             Log.d(TAG, "WHATSAPP: Switch Auto-Responder desactivado. Ignorando.")
             return
