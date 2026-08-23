@@ -16,20 +16,37 @@ object WhatsAppParser {
     private val requisitosRegex = Regex("Requisitos:\\s*(.+)")
 
     fun parse(text: String): WhatsAppService? {
-        val cleanText = text.replace("\r", "")
+        // Strip WhatsApp bold formatting (*) and clean text
+        val cleanText = text.replace("\r", "").replace("*", "")
 
-        // Required: service ID from either "🏷️ Servicio {id}" or "Me interesa {id}"
-        val idMatch = serviceIdRegex.find(cleanText) ?: lastLineIdRegex.find(cleanText)
-        val id = idMatch?.groupValues?.get(1) ?: return null
+        // Get ALL service IDs and take the LAST one (most recent message)
+        val allServiceIds = serviceIdRegex.findAll(cleanText).map { it.groupValues[1] }.toList()
+        val allLastIds = lastLineIdRegex.findAll(cleanText).map { it.groupValues[1] }.toList()
 
-        val empresa = empresaRegex.find(cleanText)?.groupValues?.get(1)?.trim() ?: ""
-        val servicio = servicioTypeRegex.find(cleanText)?.groupValues?.get(1)?.trim() ?: ""
-        val ciudad = ciudadRegex.find(cleanText)?.groupValues?.get(1)?.trim() ?: ""
-        val origen = origenRegex.find(cleanText)?.groupValues?.get(1)?.trim() ?: ""
-        val destino = destinoRegex.find(cleanText)?.groupValues?.get(1)?.trim() ?: ""
-        val pago = pagoRegex.find(cleanText)?.groupValues?.get(1)?.trim() ?: ""
-        val valor = valorRegex.find(cleanText)?.groupValues?.get(1)?.trim() ?: ""
-        val requisitos = requisitosRegex.find(cleanText)?.groupValues?.get(1)?.trim() ?: ""
+        val allIds = allServiceIds + allLastIds
+        if (allIds.isEmpty()) return null
+
+        val id = allIds.last()
+
+        // Find the start of the LAST message block
+        // Look for the last "⚡" or "Nuevo servicio" before the last service ID
+        val lastIdIndex = cleanText.lastIndexOf("Servicio $id")
+            .coerceAtLeast(cleanText.lastIndexOf("Me interesa $id"))
+
+        // Search backwards from the last ID to find the message start
+        val messageStart = findMessageStart(cleanText, lastIdIndex)
+
+        // Parse from the message start
+        val textToParse = if (messageStart >= 0) cleanText.substring(messageStart) else cleanText
+
+        val empresa = empresaRegex.find(textToParse)?.groupValues?.get(1)?.trim() ?: ""
+        val servicio = servicioTypeRegex.find(textToParse)?.groupValues?.get(1)?.trim() ?: ""
+        val ciudad = ciudadRegex.find(textToParse)?.groupValues?.get(1)?.trim() ?: ""
+        val origen = origenRegex.find(textToParse)?.groupValues?.get(1)?.trim() ?: ""
+        val destino = destinoRegex.find(textToParse)?.groupValues?.get(1)?.trim() ?: ""
+        val pago = pagoRegex.find(textToParse)?.groupValues?.get(1)?.trim() ?: ""
+        val valor = valorRegex.find(textToParse)?.groupValues?.get(1)?.trim() ?: ""
+        val requisitos = requisitosRegex.find(textToParse)?.groupValues?.get(1)?.trim() ?: ""
 
         if (id.isEmpty()) return null
 
@@ -44,5 +61,25 @@ object WhatsAppParser {
             valorCobrar = valor,
             requisitos = requisitos
         )
+    }
+
+    /**
+     * Finds the start of the last message block by searching backwards from position.
+     * Looks for ⚡, "Nuevo servicio", or start of text.
+     */
+    private fun findMessageStart(text: String, fromIndex: Int): Int {
+        if (fromIndex <= 0) return 0
+
+        // Search backwards for message start markers
+        val searchArea = text.substring(0, fromIndex)
+
+        // Find the last ⚡ before the service ID
+        val lastLightning = searchArea.lastIndexOf("⚡")
+        // Find the last "Nuevo servicio" before the service ID
+        val lastNuevoServicio = searchArea.lastIndexOf("Nuevo servicio")
+
+        // Take the latest marker found
+        val markers = listOf(lastLightning, lastNuevoServicio).filter { it >= 0 }
+        return if (markers.isNotEmpty()) markers.max() else 0
     }
 }

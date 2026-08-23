@@ -49,6 +49,13 @@ class FloatingPopupManager(private val context: Context) {
 
         // Populate data
         popupView?.findViewById<TextView>(R.id.tvServiceId)?.text = "Servicio #${service.id}"
+
+        // Show return icon if needed
+        val returnIcon = popupView?.findViewById<TextView>(R.id.tvReturnIcon)
+        if (service.needsReturnIcon()) {
+            returnIcon?.visibility = android.view.View.VISIBLE
+        }
+
         popupView?.findViewById<TextView>(R.id.tvEmpresa)?.text = service.empresa
         popupView?.findViewById<TextView>(R.id.tvServicio)?.text = service.servicio
         popupView?.findViewById<TextView>(R.id.tvCiudad)?.text = service.ciudad
@@ -56,6 +63,20 @@ class FloatingPopupManager(private val context: Context) {
         popupView?.findViewById<TextView>(R.id.tvDestino)?.text = service.destino
         popupView?.findViewById<TextView>(R.id.tvPago)?.text = "Pago: ${service.pago}"
         popupView?.findViewById<TextView>(R.id.tvValor)?.text = service.valorCobrar
+
+        // Requisitos - highlight yellow if return conditions met
+        val tvRequisitos = popupView?.findViewById<TextView>(R.id.tvRequisitos)
+        val tvRequisitosLabel = popupView?.findViewById<TextView>(R.id.tvRequisitosLabel)
+        if (service.requisitos.isNotEmpty()) {
+            tvRequisitos?.text = service.requisitos
+            if (service.needsReturnIcon()) {
+                tvRequisitos?.setTextColor(android.graphics.Color.parseColor("#FFC107"))
+                tvRequisitosLabel?.setTextColor(android.graphics.Color.parseColor("#FFC107"))
+            }
+        } else {
+            tvRequisitosLabel?.visibility = android.view.View.GONE
+            tvRequisitos?.visibility = android.view.View.GONE
+        }
 
         // Accept button
         popupView?.findViewById<Button>(R.id.btnAccept)?.setOnClickListener {
@@ -71,9 +92,14 @@ class FloatingPopupManager(private val context: Context) {
             dismiss()
         }
 
-        // Window params
+        // Window params - full width minus 10px margin each side
+        val displayMetrics = context.resources.displayMetrics
+        val screenWidth = displayMetrics.widthPixels
+        val marginPx = (10 * displayMetrics.density).toInt()
+        val popupWidth = screenWidth - (marginPx * 2)
+
         val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
+            popupWidth,
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,

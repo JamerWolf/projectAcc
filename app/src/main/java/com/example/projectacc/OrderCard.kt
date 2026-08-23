@@ -22,7 +22,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.projectacc.model.WhatsAppService
 
 sealed class OrderDisplay {
@@ -200,13 +202,22 @@ private fun WhatsAppOrderCard(service: WhatsAppService, onDismiss: () -> Unit) {
         )
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            // Source indicator + Title
-            Text(
-                text = "\uD83D\uDCF1 Servicio #${service.id}",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
+            // Source indicator + Title + Return icon
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "\uD83D\uDCF1 Servicio #${service.id}",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                if (service.needsReturnIcon()) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "🔄",
+                        fontSize = 18.sp
+                    )
+                }
+            }
 
             Spacer(modifier = Modifier.height(12.dp))
 

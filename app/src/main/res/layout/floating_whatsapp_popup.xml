@@ -18,16 +18,33 @@
         android:textColor="#FFFFFF"
         android:layout_marginBottom="8dp" />
 
-    <!-- Service ID -->
-    <TextView
-        android:id="@+id/tvServiceId"
+    <!-- Service ID + Return Icon -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Servicio #0000"
-        android:textSize="22sp"
-        android:textStyle="bold"
-        android:textColor="#4CAF50"
-        android:layout_marginBottom="8dp" />
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="8dp">
+
+        <TextView
+            android:id="@+id/tvServiceId"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Servicio #0000"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:textColor="#4CAF50" />
+
+        <TextView
+            android:id="@+id/tvReturnIcon"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="🔄"
+            android:textSize="24sp"
+            android:visibility="gone"
+            android:layout_marginStart="8dp" />
+    </LinearLayout>
 
     <!-- Empresa -->
     <TextView
@@ -110,6 +127,25 @@
         android:textSize="18sp"
         android:textStyle="bold"
         android:textColor="#FFC107"
+        android:layout_marginBottom="8dp" />
+
+    <!-- Requisitos (highlighted yellow when return icon conditions met) -->
+    <TextView
+        android:id="@+id/tvRequisitosLabel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Requisitos:"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        android:textColor="#AAAAAA"
+        android:layout_marginBottom="2dp" />
+
+    <TextView
+        android:id="@+id/tvRequisitos"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textSize="13sp"
+        android:textColor="#FFFFFF"
         android:layout_marginBottom="12dp" />
 
     <!-- Buttons -->
