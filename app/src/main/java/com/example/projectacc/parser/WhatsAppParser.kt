@@ -6,11 +6,12 @@ object WhatsAppParser {
 
     private val serviceIdRegex = Regex("🏷️\\s*Servicio\\s+(\\d+)")
     private val lastLineIdRegex = Regex("Me interesa\\s+(\\d+)")
-    private val empresaRegex = Regex("Nuevo servicio de\\s+(.+?)\\.")
+    private val empresaRegex = Regex("(?:Nuevo servicio de|disponible en|servicio programado disponible en)\\s+(.+?)\\.\\s*$", RegexOption.MULTILINE)
     private val servicioTypeRegex = Regex("Servicio\\s+\\d+\\s*[—–-]\\s*(.+)")
     private val ciudadRegex = Regex("🏙️\\s*Ciudad:\\s*(.+)")
     private val origenRegex = Regex("📍\\s*Origen:\\s*(.+)")
     private val destinoRegex = Regex("🏁\\s*Destino:\\s*(.+)")
+    private val valorFieldRegex = Regex("Valor:\\s*(.+)")
     private val pagoRegex = Regex("Pago:\\s*(.+)")
     private val valorRegex = Regex("El valor a cobrar es:\\s*(\\d+)")
     private val requisitosRegex = Regex("Requisitos:\\s*(.+)")
@@ -44,8 +45,9 @@ object WhatsAppParser {
         val ciudad = ciudadRegex.find(textToParse)?.groupValues?.get(1)?.trim() ?: ""
         val origen = origenRegex.find(textToParse)?.groupValues?.get(1)?.trim() ?: ""
         val destino = destinoRegex.find(textToParse)?.groupValues?.get(1)?.trim() ?: ""
+        val valor = valorFieldRegex.find(textToParse)?.groupValues?.get(1)?.trim() ?: ""
         val pago = pagoRegex.find(textToParse)?.groupValues?.get(1)?.trim() ?: ""
-        val valor = valorRegex.find(textToParse)?.groupValues?.get(1)?.trim() ?: ""
+        val valorCobrar = valorRegex.find(textToParse)?.groupValues?.get(1)?.trim() ?: ""
         val requisitos = requisitosRegex.find(textToParse)?.groupValues?.get(1)?.trim() ?: ""
 
         if (id.isEmpty()) return null
@@ -57,8 +59,9 @@ object WhatsAppParser {
             ciudad = ciudad,
             origen = origen,
             destino = destino,
+            valor = valor,
             pago = pago,
-            valorCobrar = valor,
+            valorCobrar = valorCobrar,
             requisitos = requisitos
         )
     }
@@ -70,16 +73,14 @@ object WhatsAppParser {
     private fun findMessageStart(text: String, fromIndex: Int): Int {
         if (fromIndex <= 0) return 0
 
-        // Search backwards for message start markers
         val searchArea = text.substring(0, fromIndex)
 
-        // Find the last ⚡ before the service ID
         val lastLightning = searchArea.lastIndexOf("⚡")
-        // Find the last "Nuevo servicio" before the service ID
         val lastNuevoServicio = searchArea.lastIndexOf("Nuevo servicio")
+        val lastRuta = searchArea.lastIndexOf("🗺️")
+        val lastProgramado = searchArea.lastIndexOf("🗓️")
 
-        // Take the latest marker found
-        val markers = listOf(lastLightning, lastNuevoServicio).filter { it >= 0 }
+        val markers = listOf(lastLightning, lastNuevoServicio, lastRuta, lastProgramado).filter { it >= 0 }
         return if (markers.isNotEmpty()) markers.max() else 0
     }
 }

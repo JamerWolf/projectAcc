@@ -55,6 +55,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.projectacc.ui.SavedLocationsScreen
 import com.example.projectacc.ui.SettingsScreen
 import com.example.projectacc.ui.WhatsAppScreen
 import com.example.projectacc.ui.theme.ProjectAccTheme
@@ -78,47 +79,71 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // Request location permission (foreground + background)
+        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION)
+            != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this,
+                arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION), 1002)
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // On Android 10+, request background location separately
+            if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this,
+                    arrayOf(android.Manifest.permission.ACCESS_BACKGROUND_LOCATION), 1003)
+            }
+        }
+
         setContent {
             ProjectAccTheme {
                 var showSettings by remember { mutableStateOf(false) }
+                var showSavedLocations by remember { mutableStateOf(false) }
 
-                if (showSettings) {
-                    SettingsScreen(onBack = { showSettings = false })
-                } else {
-                    Scaffold(
-                        modifier = Modifier.fillMaxSize(),
-                        topBar = {
-                            TopAppBar(
-                                title = { Text("Picap Assistant") },
-                                actions = {
-                                    IconButton(onClick = { showSettings = true }) {
-                                        Icon(
-                                            imageVector = Icons.Default.Settings,
-                                            contentDescription = "Configuracion"
-                                        )
+                when {
+                    showSavedLocations -> {
+                        SavedLocationsScreen(onBack = { showSavedLocations = false })
+                    }
+                    showSettings -> {
+                        SettingsScreen(
+                            onBack = { showSettings = false },
+                            onOpenSavedLocations = { showSettings = false; showSavedLocations = true }
+                        )
+                    }
+                    else -> {
+                        Scaffold(
+                            modifier = Modifier.fillMaxSize(),
+                            topBar = {
+                                TopAppBar(
+                                    title = { Text("Picap Assistant") },
+                                    actions = {
+                                        IconButton(onClick = { showSettings = true }) {
+                                            Icon(
+                                                imageVector = Icons.Default.Settings,
+                                                contentDescription = "Configuracion"
+                                            )
+                                        }
                                     }
-                                }
-                            )
-                        }
-                    ) { innerPadding ->
-                        val allPermissionsGranted = isServiceEnabled && isOverlayEnabled && isNotificationListenerEnabled
+                                )
+                            }
+                        ) { innerPadding ->
+                            val allPermissionsGranted = isServiceEnabled && isOverlayEnabled && isNotificationListenerEnabled
 
-                        if (allPermissionsGranted) {
-                            MainScreen(
-                                modifier = Modifier.padding(innerPadding),
-                                isNotificationListenerEnabled = isNotificationListenerEnabled,
-                                onOpenNotificationSettings = { openNotificationListenerSettings() }
-                            )
-                        } else {
-                            ActivationScreen(
-                                isAccessibilityEnabled = isServiceEnabled,
-                                isOverlayEnabled = isOverlayEnabled,
-                                isNotificationListenerEnabled = isNotificationListenerEnabled,
-                                onOpenAccessibilitySettings = { openAccessibilitySettings() },
-                                onOpenOverlaySettings = { openOverlaySettings() },
-                                onOpenNotificationSettings = { openNotificationListenerSettings() },
-                                modifier = Modifier.padding(innerPadding)
-                            )
+                            if (allPermissionsGranted) {
+                                MainScreen(
+                                    modifier = Modifier.padding(innerPadding),
+                                    isNotificationListenerEnabled = isNotificationListenerEnabled,
+                                    onOpenNotificationSettings = { openNotificationListenerSettings() }
+                                )
+                            } else {
+                                ActivationScreen(
+                                    isAccessibilityEnabled = isServiceEnabled,
+                                    isOverlayEnabled = isOverlayEnabled,
+                                    isNotificationListenerEnabled = isNotificationListenerEnabled,
+                                    onOpenAccessibilitySettings = { openAccessibilitySettings() },
+                                    onOpenOverlaySettings = { openOverlaySettings() },
+                                    onOpenNotificationSettings = { openNotificationListenerSettings() },
+                                    modifier = Modifier.padding(innerPadding)
+                                )
+                            }
                         }
                     }
                 }

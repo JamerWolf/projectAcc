@@ -7,10 +7,20 @@ data class WhatsAppService(
     val ciudad: String = "",
     val origen: String = "",
     val destino: String = "",
+    val valor: String = "",
     val pago: String = "",
     val valorCobrar: String = "",
     val requisitos: String = ""
 ) {
+    /**
+     * Returns the "Valor" field formatted for display.
+     * Example: "$7.480"
+     */
+    fun valorFormatted(): String? {
+        if (valor.isEmpty()) return null
+        return valor
+    }
+
     /**
      * Extracts "Medio de pago: X" from requisitos and adds formatted value.
      * Example: "El valor a cobrar es: 92205 Medio de pago: Pago efectivo"

@@ -2,9 +2,15 @@ package com.example.projectacc.floating
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.Intent
 import android.graphics.PixelFormat
+import android.net.Uri
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
+import android.location.Location
+import android.util.Log
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
@@ -13,7 +19,14 @@ import android.view.WindowManager
 import android.widget.Button
 import android.widget.TextView
 import com.example.projectacc.R
+import com.example.projectacc.location.LocationHelper
+import com.example.projectacc.location.SavedLocationManager
 import com.example.projectacc.model.WhatsAppService
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Manages a floating popup window that appears over other apps.
@@ -25,6 +38,14 @@ class FloatingPopupManager(private val context: Context) {
     private var popupView: View? = null
     private var currentService: WhatsAppService? = null
     private var onAcceptCallback: ((WhatsAppService) -> Unit)? = null
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val locationHelper = LocationHelper(context)
+
+    // Debug: store coordinates for route button
+    private var currentLat: Double = 0.0
+    private var currentLon: Double = 0.0
+    private var targetLat: Double = 0.0
+    private var targetLon: Double = 0.0
 
     fun canDrawOverlays(): Boolean {
         return Settings.canDrawOverlays(context)
@@ -47,13 +68,97 @@ class FloatingPopupManager(private val context: Context) {
         val inflater = LayoutInflater.from(context)
         popupView = inflater.inflate(R.layout.floating_whatsapp_popup, null)
 
-        // Populate data
-        popupView?.findViewById<TextView>(R.id.tvServiceId)?.text = "Servicio #${service.id}"
+        // Populate data - check servicio FIRST for Ruta/Programado, then empresa for Mostrador/OMS
+        val shortTitle = when {
+            service.servicio.contains("Ruta", ignoreCase = true) -> "Ruta"
+            service.servicio.contains("Programado", ignoreCase = true) -> "Programado"
+            service.empresa.contains("Integracion", ignoreCase = true) || service.empresa.contains("Integración", ignoreCase = true) -> "OMS"
+            service.empresa.contains("Mostrador", ignoreCase = true) -> "Mostrador"
+            else -> service.empresa
+        }
+        popupView?.findViewById<TextView>(R.id.tvServiceId)?.text = "$shortTitle #${service.id}"
 
         // Show return icon if needed
         val returnIcon = popupView?.findViewById<TextView>(R.id.tvReturnIcon)
         if (service.needsReturnIcon()) {
             returnIcon?.visibility = android.view.View.VISIBLE
+        }
+
+        // Calculate and show distance to origin
+        val tvDistancia = popupView?.findViewById<TextView>(R.id.tvDistancia)
+        val tvServiceId = popupView?.findViewById<TextView>(R.id.tvServiceId)
+        val tvLocationName = popupView?.findViewById<TextView>(R.id.tvLocationName)
+
+        if (service.origen.isNotEmpty()) {
+            scope.launch {
+                // Check for saved location match first
+                val savedLocation = SavedLocationManager.findMatch(service.origen, context)
+                val currentLocation = locationHelper.getCurrentLocation()
+
+                if (savedLocation != null && currentLocation != null) {
+                    // Use saved coordinates
+                    currentLat = currentLocation.latitude
+                    currentLon = currentLocation.longitude
+                    targetLat = savedLocation.lat
+                    targetLon = savedLocation.lon
+
+                    Log.d("FloatingPopup", "Saved location match: ${savedLocation.name}")
+                    Log.d("FloatingPopup", "Coords: from=$currentLat,$currentLon to=$targetLat,$targetLon")
+
+                    tvLocationName?.text = savedLocation.name
+                    tvLocationName?.visibility = android.view.View.VISIBLE
+                } else if (service.origen.isNotEmpty()) {
+                    // Fallback to geocoder
+                    val targetLocation = locationHelper.geocodeAddress(service.origen)
+
+                    if (currentLocation != null && targetLocation != null) {
+                        currentLat = currentLocation.latitude
+                        currentLon = currentLocation.longitude
+                        targetLat = targetLocation.latitude
+                        targetLon = targetLocation.longitude
+
+                        Log.d("FloatingPopup", "Geocoded coords: from=$currentLat,$currentLon to=$targetLat,$targetLon")
+                    }
+                }
+
+                // Calculate distance
+                if (currentLat != 0.0 && targetLat != 0.0) {
+                    val routeDistance = locationHelper.getRouteDistanceKm(
+                        currentLat, currentLon, targetLat, targetLon
+                    )
+                    val displayDistance = if (routeDistance != null) {
+                        String.format("%.1f km", routeDistance.toDouble())
+                    } else {
+                        val straightKm = android.location.Location("").apply {
+                            latitude = currentLat; longitude = currentLon
+                        }.distanceTo(android.location.Location("").apply {
+                            latitude = targetLat; longitude = targetLon
+                        }) / 1000f
+                        String.format("~%.1f km", straightKm.toDouble())
+                    }
+                    tvDistancia?.text = displayDistance
+                    tvDistancia?.visibility = android.view.View.VISIBLE
+
+                    // Click opens Google Maps with coordinates
+                    tvDistancia?.setOnClickListener {
+                        val uri = Uri.parse(
+                            "https://www.google.com/maps/dir/?api=1" +
+                            "&origin=$currentLat,$currentLon" +
+                            "&destination=$targetLat,$targetLon" +
+                            "&travelmode=driving"
+                        )
+                        val intent = Intent(Intent.ACTION_VIEW, uri)
+                        intent.setPackage("com.google.android.apps.maps")
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        try { context.startActivity(intent) }
+                        catch (e: Exception) {
+                            context.startActivity(Intent(Intent.ACTION_VIEW, uri).apply {
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            })
+                        }
+                    }
+                }
+            }
         }
 
         popupView?.findViewById<TextView>(R.id.tvCiudad)?.text = service.ciudad
@@ -82,6 +187,14 @@ class FloatingPopupManager(private val context: Context) {
             tvMedioPago?.visibility = android.view.View.VISIBLE
         }
 
+        // Valor a cobrar
+        val tvValor = popupView?.findViewById<TextView>(R.id.tvValor)
+        val valorText = service.valorFormatted()
+        if (valorText != null) {
+            tvValor?.text = "💰 $valorText"
+            tvValor?.visibility = android.view.View.VISIBLE
+        }
+
         // Accept button
         popupView?.findViewById<Button>(R.id.btnAccept)?.setOnClickListener {
             android.util.Log.d("FloatingPopup", "Boton Aceptar clickeado. Invocando callback...")
@@ -94,6 +207,27 @@ class FloatingPopupManager(private val context: Context) {
         // Close button
         popupView?.findViewById<Button>(R.id.btnClose)?.setOnClickListener {
             dismiss()
+        }
+
+        // Route button - from my GPS location to service origin (text)
+        popupView?.findViewById<Button>(R.id.btnRoute)?.setOnClickListener {
+            val uri = Uri.parse(
+                "https://www.google.com/maps/dir/?api=1" +
+                "&origin=$currentLat,$currentLon" +
+                "&destination=${Uri.encode(service.origen)}" +
+                "&travelmode=driving"
+            )
+            val intent = Intent(Intent.ACTION_VIEW, uri)
+            intent.setPackage("com.google.android.apps.maps")
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            try {
+                context.startActivity(intent)
+            } catch (e: Exception) {
+                val fallbackIntent = Intent(Intent.ACTION_VIEW, uri)
+                fallbackIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(fallbackIntent)
+            }
+            Log.d("FloatingPopup", "Ruta: $currentLat,$currentLon -> ${service.origen}")
         }
 
         // Window params - full width minus 10px margin each side

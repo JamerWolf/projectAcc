@@ -26,6 +26,15 @@
             android:textColor="#4CAF50" />
 
         <TextView
+            android:id="@+id/tvDistancia"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:textColor="#FFC107"
+            android:visibility="gone" />
+
+        <TextView
             android:id="@+id/tvReturnIcon"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -34,6 +43,17 @@
             android:visibility="gone"
             android:layout_marginStart="8dp" />
     </LinearLayout>
+
+    <!-- Valor a cobrar -->
+    <TextView
+        android:id="@+id/tvValor"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textSize="21sp"
+        android:textStyle="bold"
+        android:textColor="#4CAF50"
+        android:visibility="gone"
+        android:layout_marginBottom="4dp" />
 
     <!-- Ciudad -->
     <TextView
@@ -53,6 +73,17 @@
         android:textSize="12sp"
         android:textStyle="bold"
         android:textColor="#AAAAAA"
+        android:layout_marginBottom="2dp" />
+
+    <!-- Nombre de ubicación guardada -->
+    <TextView
+        android:id="@+id/tvLocationName"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:textColor="#FFC107"
+        android:visibility="gone"
         android:layout_marginBottom="2dp" />
 
     <TextView
@@ -90,7 +121,7 @@
         android:textStyle="bold"
         android:textColor="#FFC107"
         android:visibility="gone"
-        android:layout_marginBottom="8dp" />
+        android:layout_marginBottom="4dp" />
 
     <!-- Requisitos (highlighted yellow when return icon conditions met) -->
     <TextView
@@ -127,7 +158,19 @@
             android:textStyle="bold"
             android:backgroundTint="#4CAF50"
             android:textColor="#FFFFFF"
-            android:layout_marginEnd="8dp" />
+            android:layout_marginEnd="4dp" />
+
+        <Button
+            android:id="@+id/btnRoute"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:text="🗺️ Ruta"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:backgroundTint="#2196F3"
+            android:textColor="#FFFFFF"
+            android:layout_marginEnd="4dp" />
 
         <Button
             android:id="@+id/btnClose"

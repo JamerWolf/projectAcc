@@ -20,6 +20,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.projectacc.OrderStateManager
@@ -27,8 +28,10 @@ import com.example.projectacc.OrderStateManager
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
+    onOpenSavedLocations: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val vehiclePlate by OrderStateManager.vehiclePlate.collectAsState()
     var plateInput by remember { mutableStateOf(vehiclePlate) }
 
@@ -60,7 +63,7 @@ fun SettingsScreen(
             modifier = Modifier.fillMaxWidth()
         )
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
         Button(
             onClick = {
@@ -70,6 +73,29 @@ fun SettingsScreen(
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(text = "Guardar")
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Saved locations section
+        Text(
+            text = "Ubicaciones guardadas",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "Coordenadas exactas para direcciones frecuentes.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Button(
+            onClick = { onOpenSavedLocations() },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(text = "📍 Gestionar ubicaciones")
         }
 
         Spacer(modifier = Modifier.height(24.dp))
