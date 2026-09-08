@@ -172,9 +172,9 @@ private fun SavedLocationCard(
                 Button(
                     onClick = { onDelete(location) },
                     modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F))
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) {
-                    Text(text = "Eliminar", color = Color.White)
+                    Text(text = "Eliminar", color = MaterialTheme.colorScheme.onError)
                 }
             }
         }

@@ -124,8 +124,7 @@ class MyAccessibilityService : AccessibilityService() {
         // --- MODO AUTO-CLIC EN LISTA ---
         if (OrderStateManager.isAutoClickEnabled.value) {
             if (findAndClickEstimatedPrice(rootNode)) {
-                Log.d(TAG, "AUTOCLICK: Orden capturada! Desactivando modo auto-clic.")
-                OrderStateManager.setAutoClickEnabled(false)
+                Log.d(TAG, "AUTOCLICK: Orden capturada!")
                 hasScannedInitially = false
                 rootNode.recycle()
                 return
@@ -522,8 +521,8 @@ class MyAccessibilityService : AccessibilityService() {
                 dirRec = texts[i + 1]
             }
 
-            // Entrega: Detecta "X min (X km)" que NO empieza por "A "
-            if (current.contains("min (") && !current.startsWith("A ")) {
+            // Entrega: Detecta "X min(s) (X km)" que NO empieza por "A "
+            if ((current.contains("min (") || current.contains("mins (")) && !current.startsWith("A ")) {
                 tiempoEnt = current
                 // La dirección puede estar en i+1 o en i+2 (si el ID se interpone)
                 if (i + 1 < texts.size) {
@@ -642,21 +641,23 @@ class MyAccessibilityService : AccessibilityService() {
 
         val kmRecogida = extractKmFromPickup(order.tiempoRecogida)
         val autoAcceptKm = OrderStateManager.autoAcceptMaxKm.value
+        val minGanancia1 = OrderStateManager.autoAcceptMinGanancia1.value.toInt()
+        val minGanancia2 = OrderStateManager.autoAcceptMinGanancia2.value.toInt()
+        val maxKmCond2 = OrderStateManager.autoAcceptMaxKmCond2.value
 
-        // CONDICIÓN 1: Ganancia >= 18.000 → ACEPTAR SIEMPRE
-        if (gananciaNum >= 18000) {
-            Log.d(TAG, "AUTO-ACCEPT: Condición 1 - Ganancia $gananciaNum >= 18000. Aceptando.")
+        // CONDICIÓN 1: Ganancia >= umbral 1 → ACEPTAR SIEMPRE
+        if (gananciaNum >= minGanancia1) {
+            Log.d(TAG, "AUTO-ACCEPT: Condición 1 - Ganancia $gananciaNum >= $minGanancia1. Aceptando.")
             return true
         }
 
-        // CONDICIÓN 2: Ganancia >= 14.000 Y km <= 4.5 → ACEPTAR
-        if (gananciaNum >= 14000 && kmRecogida <= 4.5) {
-            Log.d(TAG, "AUTO-ACCEPT: Condición 2 - Ganancia $gananciaNum >= 14000 Y km $kmRecogida <= 4.5. Aceptando.")
+        // CONDICIÓN 2: Ganancia >= umbral 2 Y km <= km máximo condición 2 → ACEPTAR
+        if (gananciaNum >= minGanancia2 && kmRecogida <= maxKmCond2) {
+            Log.d(TAG, "AUTO-ACCEPT: Condición 2 - Ganancia $gananciaNum >= $minGanancia2 Y km $kmRecogida <= $maxKmCond2. Aceptando.")
             return true
         }
 
         // CONDICIÓN 3: km <= umbral seleccionado → ACEPTAR (solo si el switch está activo)
-        // O si el selector de distancia está al máximo (5.0), acepta sin límite.
         if (OrderStateManager.isAutoAcceptByKmEnabled.value) {
             if (autoAcceptKm >= 5.0 || kmRecogida <= autoAcceptKm) {
                 Log.d(TAG, "AUTO-ACCEPT: Condición 3 - umbral al máximo o km $kmRecogida <= umbral $autoAcceptKm. Aceptando.")

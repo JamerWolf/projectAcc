@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.graphics.PixelFormat
+import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
 import android.os.Handler
@@ -22,6 +23,7 @@ import com.example.projectacc.R
 import com.example.projectacc.location.LocationHelper
 import com.example.projectacc.location.SavedLocationManager
 import com.example.projectacc.model.WhatsAppService
+import com.example.projectacc.OrderStateManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -46,6 +48,8 @@ class FloatingPopupManager(private val context: Context) {
     private var currentLon: Double = 0.0
     private var targetLat: Double = 0.0
     private var targetLon: Double = 0.0
+    private var destLat: Double = 0.0
+    private var destLon: Double = 0.0
 
     fun canDrawOverlays(): Boolean {
         return Settings.canDrawOverlays(context)
@@ -121,13 +125,82 @@ class FloatingPopupManager(private val context: Context) {
                     }
                 }
 
-                // Calculate distance
+                // Calculate distance from my location to origin
                 if (currentLat != 0.0 && targetLat != 0.0) {
-                    val routeDistance = locationHelper.getRouteDistanceKm(
+                    val kmOrigen = locationHelper.getRouteDistanceKm(
                         currentLat, currentLon, targetLat, targetLon
                     )
-                    val displayDistance = if (routeDistance != null) {
-                        String.format("%.1f km", routeDistance.toDouble())
+
+                    // Show km origen next to valor
+                    val tvKmOrigen = popupView?.findViewById<TextView>(R.id.tvKmOrigen)
+                    if (kmOrigen != null) {
+                        tvKmOrigen?.text = String.format("%.1f km", kmOrigen.toDouble())
+                        tvKmOrigen?.visibility = android.view.View.VISIBLE
+                    }
+
+                    // Click opens Google Maps from my location to origin
+                    tvKmOrigen?.setOnClickListener {
+                        val uri = Uri.parse(
+                            "https://www.google.com/maps/dir/?api=1" +
+                            "&origin=$currentLat,$currentLon" +
+                            "&destination=$targetLat,$targetLon" +
+                            "&travelmode=driving"
+                        )
+                        val intent = Intent(Intent.ACTION_VIEW, uri)
+                        intent.setPackage("com.google.android.apps.maps")
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        try { context.startActivity(intent) }
+                        catch (e: Exception) {
+                            context.startActivity(Intent(Intent.ACTION_VIEW, uri).apply {
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            })
+                        }
+                    }
+
+                    // Calculate km from origin to destination
+                    var kmDestino: Float? = null
+                    if (service.destino.isNotEmpty() && targetLat != 0.0) {
+                        val tvKmDestino = popupView?.findViewById<TextView>(R.id.tvKmDestino)
+                        val destLocation = locationHelper.geocodeAddress(service.destino)
+                        if (destLocation != null) {
+                            destLat = destLocation.latitude
+                            destLon = destLocation.longitude
+                            kmDestino = locationHelper.getRouteDistanceKm(
+                                targetLat, targetLon,
+                                destLat, destLon
+                            )
+                            if (kmDestino != null) {
+                                tvKmDestino?.text = String.format("%.1f km", kmDestino.toDouble())
+                                tvKmDestino?.visibility = android.view.View.VISIBLE
+
+                                // Click opens route from origin to destination in Google Maps
+                                tvKmDestino?.setOnClickListener {
+                                    val uri = Uri.parse(
+                                        "https://www.google.com/maps/dir/?api=1" +
+                                        "&origin=$targetLat,$targetLon" +
+                                        "&destination=$destLat,$destLon" +
+                                        "&travelmode=driving"
+                                    )
+                                    val intent = Intent(Intent.ACTION_VIEW, uri)
+                                    intent.setPackage("com.google.android.apps.maps")
+                                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    try { context.startActivity(intent) }
+                                    catch (e: Exception) {
+                                        context.startActivity(Intent(Intent.ACTION_VIEW, uri).apply {
+                                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        })
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Calculate total km for title
+                    val hasReturn = service.needsReturnIcon()
+                    val totalKm = (kmOrigen ?: 0f) + (kmDestino ?: 0f) + if (hasReturn && kmDestino != null) kmDestino else 0f
+
+                    val displayTotal = if (totalKm > 0f) {
+                        String.format("%.1f km", totalKm.toDouble())
                     } else {
                         val straightKm = android.location.Location("").apply {
                             latitude = currentLat; longitude = currentLon
@@ -136,15 +209,16 @@ class FloatingPopupManager(private val context: Context) {
                         }) / 1000f
                         String.format("~%.1f km", straightKm.toDouble())
                     }
-                    tvDistancia?.text = displayDistance
+                    tvDistancia?.text = displayTotal
                     tvDistancia?.visibility = android.view.View.VISIBLE
 
-                    // Click opens Google Maps with coordinates
+                    // Click opens full route: my location → origin → destination
                     tvDistancia?.setOnClickListener {
                         val uri = Uri.parse(
                             "https://www.google.com/maps/dir/?api=1" +
                             "&origin=$currentLat,$currentLon" +
-                            "&destination=$targetLat,$targetLon" +
+                            "&destination=$destLat,$destLon" +
+                            "&waypoints=$targetLat,$targetLon" +
                             "&travelmode=driving"
                         )
                         val intent = Intent(Intent.ACTION_VIEW, uri)
@@ -209,12 +283,12 @@ class FloatingPopupManager(private val context: Context) {
             dismiss()
         }
 
-        // Route button - from my GPS location to service origin (text)
+        // Route button - from origin to destination (text addresses)
         popupView?.findViewById<Button>(R.id.btnRoute)?.setOnClickListener {
             val uri = Uri.parse(
                 "https://www.google.com/maps/dir/?api=1" +
-                "&origin=$currentLat,$currentLon" +
-                "&destination=${Uri.encode(service.origen)}" +
+                "&origin=${Uri.encode(service.origen)}" +
+                "&destination=${Uri.encode(service.destino)}" +
                 "&travelmode=driving"
             )
             val intent = Intent(Intent.ACTION_VIEW, uri)
@@ -250,6 +324,18 @@ class FloatingPopupManager(private val context: Context) {
         setupDrag(popupView!!, params)
 
         windowManager?.addView(popupView, params)
+
+        // Play popup sound if enabled
+        if (OrderStateManager.isPopupSoundEnabled.value) {
+            try {
+                val uri = Uri.parse("android.resource://${context.packageName}/${R.raw.popup_sound}")
+                val mediaPlayer = MediaPlayer.create(context, uri)
+                mediaPlayer?.setOnCompletionListener { it.release() }
+                mediaPlayer?.start()
+            } catch (e: Exception) {
+                android.util.Log.e("FloatingPopup", "Error playing sound: ${e.message}")
+            }
+        }
     }
 
     fun dismiss() {

@@ -44,16 +44,43 @@
             android:layout_marginStart="8dp" />
     </LinearLayout>
 
-    <!-- Valor a cobrar -->
-    <TextView
-        android:id="@+id/tvValor"
+    <!-- Valor + km origen + km destino -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:textSize="21sp"
-        android:textStyle="bold"
-        android:textColor="#4CAF50"
-        android:visibility="gone"
-        android:layout_marginBottom="4dp" />
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="4dp">
+
+        <TextView
+            android:id="@+id/tvValor"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textSize="21sp"
+            android:textStyle="bold"
+            android:textColor="#4CAF50"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/tvKmOrigen"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:textColor="#AAAAAA"
+            android:visibility="gone"
+            android:layout_marginEnd="8dp" />
+
+        <TextView
+            android:id="@+id/tvKmDestino"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:textColor="#2196F3"
+            android:visibility="gone" />
+    </LinearLayout>
 
     <!-- Ciudad -->
     <TextView

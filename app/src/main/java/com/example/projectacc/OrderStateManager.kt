@@ -65,6 +65,30 @@ object OrderStateManager {
         _isAutoAcceptByKmEnabled.value = enabled
     }
 
+    // Auto-accept ganancia condition 1 (accept always)
+    private val _autoAcceptMinGanancia1 = MutableStateFlow(18000.0)
+    val autoAcceptMinGanancia1: StateFlow<Double> = _autoAcceptMinGanancia1.asStateFlow()
+
+    fun setAutoAcceptMinGanancia1(ganancia: Double) {
+        _autoAcceptMinGanancia1.value = ganancia
+    }
+
+    // Auto-accept ganancia condition 2 (ganancia + km)
+    private val _autoAcceptMinGanancia2 = MutableStateFlow(14000.0)
+    val autoAcceptMinGanancia2: StateFlow<Double> = _autoAcceptMinGanancia2.asStateFlow()
+
+    fun setAutoAcceptMinGanancia2(ganancia: Double) {
+        _autoAcceptMinGanancia2.value = ganancia
+    }
+
+    // Auto-accept max km for condition 2
+    private val _autoAcceptMaxKmCond2 = MutableStateFlow(4.5)
+    val autoAcceptMaxKmCond2: StateFlow<Double> = _autoAcceptMaxKmCond2.asStateFlow()
+
+    fun setAutoAcceptMaxKmCond2(km: Double) {
+        _autoAcceptMaxKmCond2.value = km
+    }
+
     // WhatsApp orders
     private val _currentWhatsAppOrder = MutableStateFlow<WhatsAppService?>(null)
     val currentWhatsAppOrder: StateFlow<WhatsAppService?> = _currentWhatsAppOrder.asStateFlow()
@@ -145,5 +169,13 @@ object OrderStateManager {
 
     fun setGroupAutoRespondEnabled(enabled: Boolean) {
         _isGroupAutoRespondEnabled.value = enabled
+    }
+
+    // Popup sound
+    private val _isPopupSoundEnabled = MutableStateFlow(true)
+    val isPopupSoundEnabled: StateFlow<Boolean> = _isPopupSoundEnabled.asStateFlow()
+
+    fun setPopupSoundEnabled(enabled: Boolean) {
+        _isPopupSoundEnabled.value = enabled
     }
 }
