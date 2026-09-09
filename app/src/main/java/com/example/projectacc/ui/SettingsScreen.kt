@@ -123,23 +123,14 @@ fun SettingsScreen(
 
         OutlinedTextField(
             value = plateInput,
-            onValueChange = { plateInput = it.uppercase() },
+            onValueChange = {
+                plateInput = it.uppercase()
+                OrderStateManager.setVehiclePlate(plateInput.trim())
+            },
             label = { Text("Ej: ABC123") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth()
         )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Button(
-            onClick = {
-                OrderStateManager.setVehiclePlate(plateInput.trim())
-                onBack()
-            },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(text = "Guardar")
-        }
 
         Spacer(modifier = Modifier.height(24.dp))
 
