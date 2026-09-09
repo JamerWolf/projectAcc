@@ -269,6 +269,38 @@ class MyAccessibilityService : AccessibilityService() {
         OrderStateManager.setWhatsAppOrder(service)
         OrderStateManager.addScannedWhatsAppServiceId(service.id)
 
+        // Check auto-accept conditions (same as Picap)
+        val valorCobrar = service.extractValor() ?: 0
+        val minGanancia1 = OrderStateManager.whatsappAutoAcceptMinGanancia1.value
+        val minGanancia2 = OrderStateManager.whatsappAutoAcceptMinGanancia2.value
+        val maxKmCond2 = OrderStateManager.whatsappAutoAcceptMaxKmCond2.value
+        val isKmEnabled = OrderStateManager.isWhatsappAutoAcceptByKmEnabled.value
+        val maxKm = OrderStateManager.whatsappAutoAcceptMaxKm.value
+
+        // Extract km from service (WhatsApp services may have km in origen field)
+        val kmRecogida = extractKmFromWhatsApp(service.origen)
+
+        // Condition 1: Always accept if ganancia >= minGanancia1
+        if (valorCobrar >= minGanancia1) {
+            Log.d(TAG, "WHATSAPP: Auto-aceptar condición 1: valor $valorCobrar >= $minGanancia1")
+            pasteAndSend("Me interesa ${service.id}")
+            return
+        }
+
+        // Condition 2: Accept if ganancia >= minGanancia2 AND km <= maxKmCond2
+        if (kmRecogida != null && kmRecogida <= maxKmCond2 && valorCobrar >= minGanancia2) {
+            Log.d(TAG, "WHATSAPP: Auto-aceptar condición 2: valor $valorCobrar >= $minGanancia2 y km $kmRecogida <= $maxKmCond2")
+            pasteAndSend("Me interesa ${service.id}")
+            return
+        }
+
+        // Condition 3: Accept by km threshold (if enabled)
+        if (isKmEnabled && kmRecogida != null && (maxKm >= 5.0 || kmRecogida <= maxKm)) {
+            Log.d(TAG, "WHATSAPP: Auto-aceptar por distancia: km $kmRecogida <= umbral $maxKm")
+            pasteAndSend("Me interesa ${service.id}")
+            return
+        }
+
         // Show floating popup (post to main thread for UI)
         if (floatingPopup?.canDrawOverlays() == true) {
             withContext(Dispatchers.Main) {
@@ -277,6 +309,16 @@ class MyAccessibilityService : AccessibilityService() {
                 }
             }
         }
+    }
+
+    /**
+     * Extracts km from WhatsApp service origen field.
+     * Example: "Puerto Colombia (4.2 km)"
+     * Returns km value or null if not found.
+     */
+    private fun extractKmFromWhatsApp(origen: String): Double? {
+        val match = Regex("([\\d.,]+)\\s*km", RegexOption.IGNORE_CASE).find(origen)
+        return match?.groupValues?.get(1)?.replace(",", ".")?.toDoubleOrNull()
     }
 
     private fun extractAllText(node: AccessibilityNodeInfo?): String {

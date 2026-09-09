@@ -171,6 +171,42 @@ object OrderStateManager {
         _isGroupAutoRespondEnabled.value = enabled
     }
 
+    // WhatsApp auto-accept settings (same conditions as Picap)
+    private val _whatsappAutoAcceptMinGanancia1 = MutableStateFlow(18000.0)
+    val whatsappAutoAcceptMinGanancia1: StateFlow<Double> = _whatsappAutoAcceptMinGanancia1.asStateFlow()
+
+    fun setWhatsappAutoAcceptMinGanancia1(ganancia: Double) {
+        _whatsappAutoAcceptMinGanancia1.value = ganancia
+    }
+
+    private val _whatsappAutoAcceptMinGanancia2 = MutableStateFlow(14000.0)
+    val whatsappAutoAcceptMinGanancia2: StateFlow<Double> = _whatsappAutoAcceptMinGanancia2.asStateFlow()
+
+    fun setWhatsappAutoAcceptMinGanancia2(ganancia: Double) {
+        _whatsappAutoAcceptMinGanancia2.value = ganancia
+    }
+
+    private val _whatsappAutoAcceptMaxKmCond2 = MutableStateFlow(4.5)
+    val whatsappAutoAcceptMaxKmCond2: StateFlow<Double> = _whatsappAutoAcceptMaxKmCond2.asStateFlow()
+
+    fun setWhatsappAutoAcceptMaxKmCond2(km: Double) {
+        _whatsappAutoAcceptMaxKmCond2.value = km
+    }
+
+    private val _isWhatsappAutoAcceptByKmEnabled = MutableStateFlow(false)
+    val isWhatsappAutoAcceptByKmEnabled: StateFlow<Boolean> = _isWhatsappAutoAcceptByKmEnabled.asStateFlow()
+
+    fun setWhatsappAutoAcceptByKmEnabled(enabled: Boolean) {
+        _isWhatsappAutoAcceptByKmEnabled.value = enabled
+    }
+
+    private val _whatsappAutoAcceptMaxKm = MutableStateFlow(2.0)
+    val whatsappAutoAcceptMaxKm: StateFlow<Double> = _whatsappAutoAcceptMaxKm.asStateFlow()
+
+    fun setWhatsappAutoAcceptMaxKm(km: Double) {
+        _whatsappAutoAcceptMaxKm.value = km
+    }
+
     // Popup sound
     private val _isPopupSoundEnabled = MutableStateFlow(true)
     val isPopupSoundEnabled: StateFlow<Boolean> = _isPopupSoundEnabled.asStateFlow()

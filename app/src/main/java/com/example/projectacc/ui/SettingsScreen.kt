@@ -301,6 +301,135 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(24.dp))
 
+        // WhatsApp auto-accept section
+        Text(
+            text = "Aceptación automática WhatsApp",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "Configurar condiciones para aceptar servicios de WhatsApp automáticamente.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // WhatsApp auto-accept state
+        val whatsappAutoAcceptMinGanancia1 by OrderStateManager.whatsappAutoAcceptMinGanancia1.collectAsState()
+        val whatsappAutoAcceptMinGanancia2 by OrderStateManager.whatsappAutoAcceptMinGanancia2.collectAsState()
+        val whatsappAutoAcceptMaxKmCond2 by OrderStateManager.whatsappAutoAcceptMaxKmCond2.collectAsState()
+        val isWhatsappAutoAcceptByKmEnabled by OrderStateManager.isWhatsappAutoAcceptByKmEnabled.collectAsState()
+        val whatsappAutoAcceptMaxKm by OrderStateManager.whatsappAutoAcceptMaxKm.collectAsState()
+
+        var whatsappGanancia1Input by remember { mutableStateOf(whatsappAutoAcceptMinGanancia1.toInt().toString()) }
+        var whatsappGanancia2Input by remember { mutableStateOf(whatsappAutoAcceptMinGanancia2.toInt().toString()) }
+        var whatsappKmCond2Input by remember { mutableStateOf(whatsappAutoAcceptMaxKmCond2.toString()) }
+        var whatsappKmUmbralInput by remember { mutableStateOf(whatsappAutoAcceptMaxKm.toString()) }
+
+        OutlinedTextField(
+            value = whatsappGanancia1Input,
+            onValueChange = {
+                whatsappGanancia1Input = it.filter { c -> c.isDigit() }
+                OrderStateManager.setWhatsappAutoAcceptMinGanancia1(whatsappGanancia1Input.toDoubleOrNull() ?: 18000.0)
+            },
+            label = { Text("Ganancia mínima (aceptar siempre)") },
+            suffix = { Text("COP") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "Si la ganancia es igual o mayor, se acepta sin importar los km.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 11.sp
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        OutlinedTextField(
+            value = whatsappGanancia2Input,
+            onValueChange = {
+                whatsappGanancia2Input = it.filter { c -> c.isDigit() }
+                OrderStateManager.setWhatsappAutoAcceptMinGanancia2(whatsappGanancia2Input.toDoubleOrNull() ?: 14000.0)
+            },
+            label = { Text("Ganancia mínima 2da condición") },
+            suffix = { Text("COP") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+
+        OutlinedTextField(
+            value = whatsappKmCond2Input,
+            onValueChange = {
+                whatsappKmCond2Input = it.filter { c -> c.isDigit() || c == '.' }
+                OrderStateManager.setWhatsappAutoAcceptMaxKmCond2(whatsappKmCond2Input.toDoubleOrNull() ?: 4.5)
+            },
+            label = { Text("Km máximo 2da condición") },
+            suffix = { Text("km") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "Si la ganancia es igual o mayor Y los km de recogida son menores o iguales, se acepta.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 11.sp
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Aceptar por distancia",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                Text(
+                    text = "Aceptar si km de recogida <= umbral.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = isWhatsappAutoAcceptByKmEnabled,
+                onCheckedChange = { OrderStateManager.setWhatsappAutoAcceptByKmEnabled(it) }
+            )
+        }
+
+        if (isWhatsappAutoAcceptByKmEnabled) {
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = whatsappKmUmbralInput,
+                onValueChange = {
+                    whatsappKmUmbralInput = it.filter { c -> c.isDigit() || c == '.' }
+                    OrderStateManager.setWhatsappAutoAcceptMaxKm(whatsappKmUmbralInput.toDoubleOrNull() ?: 2.0)
+                },
+                label = { Text("Km máximo umbral") },
+                suffix = { Text("km") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Si es 5.0 o más, acepta sin límite de distancia.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 11.sp
+            )
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
         // Update section
         val scope = rememberCoroutineScope()
         var isCheckingUpdate by remember { mutableStateOf(false) }
