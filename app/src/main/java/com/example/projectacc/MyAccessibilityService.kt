@@ -249,9 +249,12 @@ class MyAccessibilityService : AccessibilityService() {
 
         // 1. AUTO-PLATE: Disabled here - handled by NotificationInterceptorService
 
-        // 2. SERVICE MESSAGE: Only if switch is enabled
-        if (!OrderStateManager.isGroupAutoRespondEnabled.value) {
-            Log.d(TAG, "WHATSAPP: Switch Auto-Responder desactivado. Ignorando.")
+        // 2. SERVICE MESSAGE: Only if at least one switch is enabled
+        val autoRespondEnabled = OrderStateManager.isGroupAutoRespondEnabled.value
+        val showPopupEnabled = OrderStateManager.isWhatsAppShowPopupEnabled.value
+
+        if (!autoRespondEnabled && !showPopupEnabled) {
+            Log.d(TAG, "WHATSAPP: Ambos switches desactivados. Ignorando.")
             return
         }
 
@@ -280,29 +283,20 @@ class MyAccessibilityService : AccessibilityService() {
         // Extract km from service (WhatsApp services may have km in origen field)
         val kmRecogida = extractKmFromWhatsApp(service.origen)
 
-        // Condition 1: Always accept if valor >= minGanancia1
-        if (valor >= minGanancia1) {
-            Log.d(TAG, "WHATSAPP: Auto-aceptar condición 1: valor $valor >= $minGanancia1")
+        // Check if service meets auto-accept conditions
+        val meetsConditions = valor >= minGanancia1 ||
+            (kmRecogida != null && kmRecogida <= maxKmCond2 && valor >= minGanancia2) ||
+            (isKmEnabled && kmRecogida != null && (maxKm >= 5.0 || kmRecogida <= maxKm))
+
+        // Auto-respond if enabled AND conditions are met
+        if (autoRespondEnabled && meetsConditions) {
+            Log.d(TAG, "WHATSAPP: Auto-aceptar: valor $valor, km $kmRecogida")
             pasteAndSend("Me interesa ${service.id}")
             return
         }
 
-        // Condition 2: Accept if valor >= minGanancia2 AND km <= maxKmCond2
-        if (kmRecogida != null && kmRecogida <= maxKmCond2 && valor >= minGanancia2) {
-            Log.d(TAG, "WHATSAPP: Auto-aceptar condición 2: valor $valor >= $minGanancia2 y km $kmRecogida <= $maxKmCond2")
-            pasteAndSend("Me interesa ${service.id}")
-            return
-        }
-
-        // Condition 3: Accept by km threshold (if enabled)
-        if (isKmEnabled && kmRecogida != null && (maxKm >= 5.0 || kmRecogida <= maxKm)) {
-            Log.d(TAG, "WHATSAPP: Auto-aceptar por distancia: km $kmRecogida <= umbral $maxKm")
-            pasteAndSend("Me interesa ${service.id}")
-            return
-        }
-
-        // Show floating popup (post to main thread for UI)
-        if (floatingPopup?.canDrawOverlays() == true) {
+        // Show floating popup if enabled (post to main thread for UI)
+        if (showPopupEnabled && floatingPopup?.canDrawOverlays() == true) {
             withContext(Dispatchers.Main) {
                 floatingPopup?.show(service) { acceptedService ->
                     pasteAndSend("Me interesa ${acceptedService.id}")

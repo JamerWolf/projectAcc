@@ -171,6 +171,14 @@ object OrderStateManager {
         _isGroupAutoRespondEnabled.value = enabled
     }
 
+    // WhatsApp show popup (show floating popup when service is detected)
+    private val _isWhatsAppShowPopupEnabled = MutableStateFlow(false)
+    val isWhatsAppShowPopupEnabled: StateFlow<Boolean> = _isWhatsAppShowPopupEnabled.asStateFlow()
+
+    fun setWhatsAppShowPopupEnabled(enabled: Boolean) {
+        _isWhatsAppShowPopupEnabled.value = enabled
+    }
+
     // WhatsApp auto-accept settings (same conditions as Picap)
     private val _whatsappAutoAcceptMinGanancia1 = MutableStateFlow(18000.0)
     val whatsappAutoAcceptMinGanancia1: StateFlow<Double> = _whatsappAutoAcceptMinGanancia1.asStateFlow()

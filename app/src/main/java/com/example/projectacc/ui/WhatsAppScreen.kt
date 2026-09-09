@@ -29,6 +29,7 @@ import com.example.projectacc.OrderStateManager
 fun WhatsAppScreen(modifier: Modifier = Modifier) {
     val whatsAppOrder by OrderStateManager.currentWhatsAppOrder.collectAsState()
     val isGroupAutoRespond by OrderStateManager.isGroupAutoRespondEnabled.collectAsState()
+    val isShowPopup by OrderStateManager.isWhatsAppShowPopupEnabled.collectAsState()
     val isAutoPlate by OrderStateManager.isAutoPlateEnabled.collectAsState()
     val vehiclePlate by OrderStateManager.vehiclePlate.collectAsState()
 
@@ -57,7 +58,7 @@ fun WhatsAppScreen(modifier: Modifier = Modifier) {
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = if (isGroupAutoRespond) "Popup flotante activo" else "Desactivado",
+                    text = if (isGroupAutoRespond) "Enviando respuesta automática" else "Desactivado",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -65,6 +66,30 @@ fun WhatsAppScreen(modifier: Modifier = Modifier) {
             Switch(
                 checked = isGroupAutoRespond,
                 onCheckedChange = { OrderStateManager.setGroupAutoRespondEnabled(it) }
+            )
+        }
+
+        Divider(modifier = Modifier.padding(vertical = 8.dp))
+
+        // Show Popup switch
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Mostrar Popup",
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = if (isShowPopup) "Popup flotante activo" else "Desactivado",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = isShowPopup,
+                onCheckedChange = { OrderStateManager.setWhatsAppShowPopupEnabled(it) }
             )
         }
 
