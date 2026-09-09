@@ -128,6 +128,13 @@ class NotificationInterceptorService : NotificationListenerService() {
             return
         }
 
+        // Only auto-respond from "Pilotos Pibox Cruz Verde Cucuta" group
+        val allowedGroup = "pilotos pibox cruz verde cucuta"
+        if (!lowerText.contains(allowedGroup)) {
+            Log.d(TAG, "AUTO-SERVICIO: Notificación no es del grupo permitido. Ignorando.")
+            return
+        }
+
         val service = WhatsAppParser.parse(fullText)
         if (service != null) {
             val scannedIds = OrderStateManager.scannedWhatsAppServiceIds.value
