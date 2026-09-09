@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -40,6 +41,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.example.projectacc.OrderStateManager
 import com.example.projectacc.update.UpdateChecker
 
@@ -330,7 +333,11 @@ fun SettingsScreen(
                                 updateInfo.downloadUrl,
                                 updateInfo.tagName
                             )
-                            // Register receiver to open install intent when download completes
+                            // Show toast on main thread
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(context, "Descargando actualización...", Toast.LENGTH_LONG).show()
+                            }
+                            // Register receiver on main thread to open install intent when download completes
                             val receiver = object : BroadcastReceiver() {
                                 override fun onReceive(ctx: Context, intent: Intent) {
                                     val id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1)
@@ -354,7 +361,9 @@ fun SettingsScreen(
                                     }
                                 }
                             }
-                            context.registerReceiver(receiver, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE), Context.RECEIVER_NOT_EXPORTED)
+                            withContext(Dispatchers.Main) {
+                                context.registerReceiver(receiver, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE), Context.RECEIVER_NOT_EXPORTED)
+                            }
                         } else {
                             updateMessage = "Estás en la última versión"
                         }
