@@ -358,14 +358,13 @@ fun SettingsScreen(
                                 override fun onReceive(ctx: Context, intent: Intent) {
                                     val id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1)
                                     if (id == downloadId) {
-                                        // Get the file path
+                                        // Get the file path using COLUMN_LOCAL_FILENAME
                                         val dm = ctx.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
                                         val query = DownloadManager.Query().setFilterById(downloadId)
                                         val cursor = dm.query(query)
                                         if (cursor.moveToFirst()) {
-                                            val uriIdx = cursor.getColumnIndex(DownloadManager.COLUMN_LOCAL_URI)
-                                            val uri = cursor.getString(uriIdx)
-                                            val filePath = Uri.parse(uri).path
+                                            val filePathIdx = cursor.getColumnIndex(DownloadManager.COLUMN_LOCAL_FILENAME)
+                                            val filePath = cursor.getString(filePathIdx)
                                             if (filePath != null) {
                                                 val installIntent = UpdateChecker.getInstallIntent(ctx, filePath)
                                                 installIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
