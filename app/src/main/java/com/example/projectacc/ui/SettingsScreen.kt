@@ -350,7 +350,7 @@ fun SettingsScreen(
                                     }
                                 }
                             }
-                            context.registerReceiver(receiver, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE))
+                            context.registerReceiver(receiver, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE), Context.RECEIVER_NOT_EXPORTED)
                         } else {
                             updateMessage = "Estás en la última versión"
                         }
