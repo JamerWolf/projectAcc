@@ -306,6 +306,7 @@ class MyAccessibilityService : AccessibilityService() {
 
     /**
      * Copies text to clipboard, then performs paste + send on the current WhatsApp input.
+     * Uses retry mechanism for cases where multiple messages come in simultaneously.
      */
     fun pasteAndSend(text: String) {
         Log.d(TAG, "WHATSAPP: pasteAndSend called: $text")
@@ -325,18 +326,34 @@ class MyAccessibilityService : AccessibilityService() {
                 inputNode.performAction(AccessibilityNodeInfo.ACTION_PASTE, pasteBundle)
                 Log.d(TAG, "WHATSAPP: Texto pegado: $text")
 
-                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                    val root = rootInActiveWindow ?: return@postDelayed
-                    val sendBtn = findSendButton(root)
-                    if (sendBtn != null) {
-                        sendBtn.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                        Log.d(TAG, "WHATSAPP: Mensaje enviado: $text")
-                        sendBtn.recycle()
-                    } else {
-                        Log.w(TAG, "WHATSAPP: Boton de envio no encontrado")
+                // Increased delay and added retry for send button
+                val handler = android.os.Handler(android.os.Looper.getMainLooper())
+                var attempts = 0
+                val maxAttempts = 3
+
+                val retryRunnable = object : Runnable {
+                    override fun run() {
+                        attempts++
+                        val root = rootInActiveWindow ?: return
+                        val sendBtn = findSendButton(root)
+                        if (sendBtn != null) {
+                            sendBtn.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                            Log.d(TAG, "WHATSAPP: Mensaje enviado (intento #$attempts): $text")
+                            sendBtn.recycle()
+                            root.recycle()
+                        } else {
+                            root.recycle()
+                            if (attempts < maxAttempts) {
+                                Log.d(TAG, "WHATSAPP: Boton de envio no encontrado, reintento #$attempts")
+                                handler.postDelayed(this, 300)
+                            } else {
+                                Log.w(TAG, "WHATSAPP: Boton de envio no encontrado despues de $maxAttempts intentos")
+                            }
+                        }
                     }
-                    root.recycle()
-                }, 300)
+                }
+
+                handler.postDelayed(retryRunnable, 500)
             } else {
                 Log.w(TAG, "WHATSAPP: Campo de texto no encontrado")
             }
@@ -375,17 +392,27 @@ class MyAccessibilityService : AccessibilityService() {
         val text = node.text?.toString() ?: ""
         val id = node.viewIdResourceName ?: ""
 
-        if (cd.contains("Enviar", ignoreCase = true) || cd.contains("Send", ignoreCase = true) ||
-            text.contains("Enviar", ignoreCase = true) || text.contains("Send", ignoreCase = true) ||
-            id.contains("send", ignoreCase = true)
-        ) {
-            if (node.isClickable) return node
-            // Try parent
-            val parent = node.parent
-            if (parent != null && parent.isClickable) {
-                val result = parent
-                parent.recycle()
-                return result
+        // Exclude forward/reenviar buttons - they contain "Enviar" but are NOT the send button
+        val isForwardButton = cd.contains("Reenviar", ignoreCase = true) ||
+                cd.contains("Forward", ignoreCase = true) ||
+                text.contains("Reenviar", ignoreCase = true) ||
+                text.contains("Forward", ignoreCase = true)
+
+        if (!isForwardButton) {
+            // Check for send button by content description, text, or resource ID
+            if (cd.contains("Enviar", ignoreCase = true) || cd.contains("Send", ignoreCase = true) ||
+                text.contains("Enviar", ignoreCase = true) || text.contains("Send", ignoreCase = true) ||
+                id.contains("send", ignoreCase = true) ||
+                id.contains("com.whatsapp:id/send", ignoreCase = true)
+            ) {
+                if (node.isClickable) return node
+                // Try parent
+                val parent = node.parent
+                if (parent != null && parent.isClickable) {
+                    val result = parent
+                    parent.recycle()
+                    return result
+                }
             }
         }
 
