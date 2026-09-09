@@ -73,7 +73,19 @@ fun SettingsScreen(
         Text(
             text = "Configuracion",
             style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
+            color = Color.White
+        )
+
+        val versionName = try {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "0.0.0"
+        } catch (e: Exception) {
+            "0.0.0"
+        }
+        Text(
+            text = "Version: $versionName",
+            style = MaterialTheme.typography.bodySmall,
+            color = Color.Gray
         )
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -81,7 +93,8 @@ fun SettingsScreen(
         Text(
             text = "Placa del vehiculo",
             style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold
+            fontWeight = FontWeight.SemiBold,
+            color = Color.White
         )
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -111,7 +124,8 @@ fun SettingsScreen(
         Text(
             text = "Ubicaciones guardadas",
             style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold
+            fontWeight = FontWeight.SemiBold,
+            color = Color.White
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
@@ -139,7 +153,8 @@ fun SettingsScreen(
                 Text(
                     text = "Sonido del popup",
                     style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White
                 )
                 Text(
                     text = "Reproducir sonido al recibir un servicio.",
@@ -159,7 +174,8 @@ fun SettingsScreen(
         Text(
             text = "Aceptación automática Picap",
             style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold
+            fontWeight = FontWeight.SemiBold,
+            color = Color.White
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
@@ -223,7 +239,8 @@ fun SettingsScreen(
                 Text(
                     text = "Aceptar por distancia",
                     style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White
                 )
                 Text(
                     text = "Aceptar si km de recogida <= umbral.",
@@ -281,7 +298,8 @@ fun SettingsScreen(
         Text(
             text = "Actualizaciones",
             style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold
+            fontWeight = FontWeight.SemiBold,
+            color = Color.White
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
@@ -363,7 +381,8 @@ fun SettingsScreen(
         Text(
             text = "Cache de servicios",
             style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold
+            fontWeight = FontWeight.SemiBold,
+            color = Color.White
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(

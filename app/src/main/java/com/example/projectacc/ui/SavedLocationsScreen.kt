@@ -52,7 +52,8 @@ fun SavedLocationsScreen(onBack: () -> Unit) {
         Text(
             text = "Ubicaciones guardadas",
             style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
+            color = Color.White
         )
 
         Spacer(modifier = Modifier.height(8.dp))
