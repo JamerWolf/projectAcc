@@ -13,6 +13,7 @@ class NotificationInterceptorService : NotificationListenerService() {
     private val TAG = "NotificationInterceptor"
 
     private val plateRequestPatterns = listOf("placa", "vehiculo", "vehículo", "ascopec", "tarjeta de propietario")
+    private val plateRequestExactPhrases = listOf("envíame la placa de tu vehículo", "enviame la placa de tu vehiculo")
     private var floatingPopup: FloatingPopupManager? = null
 
     override fun onCreate() {
@@ -88,7 +89,8 @@ class NotificationInterceptorService : NotificationListenerService() {
             val plate = OrderStateManager.vehiclePlate.value
             if (plate.isNotEmpty()) {
                 val isPlateRequest = plateRequestPatterns.any { pattern -> lowerText.contains(pattern) }
-                if (isPlateRequest) {
+                val isExactPhrase = plateRequestExactPhrases.any { phrase -> lowerText.contains(phrase) }
+                if (isPlateRequest || isExactPhrase) {
                     Log.d(TAG, "AUTO-PLACA: Solicitud de placa detectada. Abriendo chat y pegando placa...")
 
                     // Copy plate to clipboard
@@ -96,17 +98,18 @@ class NotificationInterceptorService : NotificationListenerService() {
                     val clip = android.content.ClipData.newPlainText("whatsapp_response", plate)
                     clipboard.setPrimaryClip(clip)
 
-                    // Save PendingIntent and launch forward activity (paste ONLY, no send)
+                    // Save PendingIntent and launch forward activity
+                    // Auto-send if exact phrase match, otherwise just paste
                     val savedContentIntent = notification.contentIntent
                     if (savedContentIntent != null) {
                         WhatsAppIntentHolder.pendingIntent = savedContentIntent
                         WhatsAppIntentHolder.lastCopiedText = plate
                         val forwardIntent = Intent(this, WhatsAppForwardActivity::class.java).apply {
                             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            putExtra(WhatsAppForwardActivity.EXTRA_AUTO_SEND, false)
+                            putExtra(WhatsAppForwardActivity.EXTRA_AUTO_SEND, isExactPhrase)
                         }
                         startActivity(forwardIntent)
-                        Log.d(TAG, "AUTO-PLACA: WhatsAppForwardActivity lanzada (solo pegar)")
+                        Log.d(TAG, "AUTO-PLACA: WhatsAppForwardActivity lanzada (auto-send: $isExactPhrase)")
                     }
                     return
                 }
