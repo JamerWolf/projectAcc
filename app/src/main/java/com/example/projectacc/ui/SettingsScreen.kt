@@ -201,7 +201,10 @@ fun SettingsScreen(
 
         OutlinedTextField(
             value = ganancia1Input,
-            onValueChange = { ganancia1Input = it.filter { c -> c.isDigit() } },
+            onValueChange = {
+                ganancia1Input = it.filter { c -> c.isDigit() }
+                OrderStateManager.setAutoAcceptMinGanancia1(ganancia1Input.toDoubleOrNull() ?: 18000.0)
+            },
             label = { Text("Ganancia mínima (aceptar siempre)") },
             suffix = { Text("COP") },
             singleLine = true,
@@ -219,7 +222,10 @@ fun SettingsScreen(
 
         OutlinedTextField(
             value = ganancia2Input,
-            onValueChange = { ganancia2Input = it.filter { c -> c.isDigit() } },
+            onValueChange = {
+                ganancia2Input = it.filter { c -> c.isDigit() }
+                OrderStateManager.setAutoAcceptMinGanancia2(ganancia2Input.toDoubleOrNull() ?: 14000.0)
+            },
             label = { Text("Ganancia mínima 2da condición") },
             suffix = { Text("COP") },
             singleLine = true,
@@ -229,7 +235,10 @@ fun SettingsScreen(
 
         OutlinedTextField(
             value = kmCond2Input,
-            onValueChange = { kmCond2Input = it.filter { c -> c.isDigit() || c == '.' } },
+            onValueChange = {
+                kmCond2Input = it.filter { c -> c.isDigit() || c == '.' }
+                OrderStateManager.setAutoAcceptMaxKmCond2(kmCond2Input.toDoubleOrNull() ?: 4.5)
+            },
             label = { Text("Km máximo 2da condición") },
             suffix = { Text("km") },
             singleLine = true,
@@ -272,7 +281,10 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedTextField(
                 value = kmUmbralInput,
-                onValueChange = { kmUmbralInput = it.filter { c -> c.isDigit() || c == '.' } },
+                onValueChange = {
+                    kmUmbralInput = it.filter { c -> c.isDigit() || c == '.' }
+                    OrderStateManager.setAutoAcceptMaxKm(kmUmbralInput.toDoubleOrNull() ?: 2.0)
+                },
                 label = { Text("Km máximo umbral") },
                 suffix = { Text("km") },
                 singleLine = true,
@@ -285,21 +297,6 @@ fun SettingsScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 11.sp
             )
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Button(
-            onClick = {
-                OrderStateManager.setAutoAcceptMinGanancia1(ganancia1Input.toDoubleOrNull() ?: 18000.0)
-                OrderStateManager.setAutoAcceptMinGanancia2(ganancia2Input.toDoubleOrNull() ?: 14000.0)
-                OrderStateManager.setAutoAcceptMaxKmCond2(kmCond2Input.toDoubleOrNull() ?: 4.5)
-                OrderStateManager.setAutoAcceptMaxKm(kmUmbralInput.toDoubleOrNull() ?: 2.0)
-                onBack()
-            },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(text = "Guardar")
         }
 
         Spacer(modifier = Modifier.height(24.dp))
