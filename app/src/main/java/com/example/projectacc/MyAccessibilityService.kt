@@ -270,7 +270,7 @@ class MyAccessibilityService : AccessibilityService() {
         OrderStateManager.addScannedWhatsAppServiceId(service.id)
 
         // Check auto-accept conditions (same as Picap)
-        val valorCobrar = service.extractValor() ?: 0
+        val valor = service.extractValor() ?: 0
         val minGanancia1 = OrderStateManager.whatsappAutoAcceptMinGanancia1.value
         val minGanancia2 = OrderStateManager.whatsappAutoAcceptMinGanancia2.value
         val maxKmCond2 = OrderStateManager.whatsappAutoAcceptMaxKmCond2.value
@@ -280,16 +280,16 @@ class MyAccessibilityService : AccessibilityService() {
         // Extract km from service (WhatsApp services may have km in origen field)
         val kmRecogida = extractKmFromWhatsApp(service.origen)
 
-        // Condition 1: Always accept if ganancia >= minGanancia1
-        if (valorCobrar >= minGanancia1) {
-            Log.d(TAG, "WHATSAPP: Auto-aceptar condición 1: valor $valorCobrar >= $minGanancia1")
+        // Condition 1: Always accept if valor >= minGanancia1
+        if (valor >= minGanancia1) {
+            Log.d(TAG, "WHATSAPP: Auto-aceptar condición 1: valor $valor >= $minGanancia1")
             pasteAndSend("Me interesa ${service.id}")
             return
         }
 
-        // Condition 2: Accept if ganancia >= minGanancia2 AND km <= maxKmCond2
-        if (kmRecogida != null && kmRecogida <= maxKmCond2 && valorCobrar >= minGanancia2) {
-            Log.d(TAG, "WHATSAPP: Auto-aceptar condición 2: valor $valorCobrar >= $minGanancia2 y km $kmRecogida <= $maxKmCond2")
+        // Condition 2: Accept if valor >= minGanancia2 AND km <= maxKmCond2
+        if (kmRecogida != null && kmRecogida <= maxKmCond2 && valor >= minGanancia2) {
+            Log.d(TAG, "WHATSAPP: Auto-aceptar condición 2: valor $valor >= $minGanancia2 y km $kmRecogida <= $maxKmCond2")
             pasteAndSend("Me interesa ${service.id}")
             return
         }
