@@ -1,5 +1,12 @@
 package com.example.projectacc.ui
 
+import androidx.compose.foundation.background
+import android.app.DownloadManager
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.net.Uri
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -28,7 +35,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import com.example.projectacc.OrderStateManager
+import com.example.projectacc.update.UpdateChecker
 
 @Composable
 fun SettingsScreen(
@@ -56,6 +66,7 @@ fun SettingsScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
             .verticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
@@ -258,6 +269,92 @@ fun SettingsScreen(
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(text = "Guardar")
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Update section
+        val scope = rememberCoroutineScope()
+        var isCheckingUpdate by remember { mutableStateOf(false) }
+        var updateMessage by remember { mutableStateOf<String?>(null) }
+
+        Text(
+            text = "Actualizaciones",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "Verificar si hay una nueva versión disponible.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Button(
+            onClick = {
+                isCheckingUpdate = true
+                updateMessage = null
+                scope.launch {
+                    try {
+                        val versionName = context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "0.0.0"
+                        val updateInfo = UpdateChecker.checkForUpdate(versionName)
+                        isCheckingUpdate = false
+                        if (updateInfo != null) {
+                            updateMessage = "Nueva versión: v${updateInfo.version}"
+                            // Download and install
+                            val downloadId = UpdateChecker.downloadApk(
+                                context,
+                                updateInfo.downloadUrl,
+                                updateInfo.tagName
+                            )
+                            // Register receiver to open install intent when download completes
+                            val receiver = object : BroadcastReceiver() {
+                                override fun onReceive(ctx: Context, intent: Intent) {
+                                    val id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1)
+                                    if (id == downloadId) {
+                                        // Get the file path
+                                        val dm = ctx.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                                        val query = DownloadManager.Query().setFilterById(downloadId)
+                                        val cursor = dm.query(query)
+                                        if (cursor.moveToFirst()) {
+                                            val uriIdx = cursor.getColumnIndex(DownloadManager.COLUMN_LOCAL_URI)
+                                            val uri = cursor.getString(uriIdx)
+                                            val filePath = Uri.parse(uri).path
+                                            if (filePath != null) {
+                                                val installIntent = UpdateChecker.getInstallIntent(ctx, filePath)
+                                                installIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                                ctx.startActivity(installIntent)
+                                            }
+                                        }
+                                        cursor.close()
+                                        ctx.unregisterReceiver(this)
+                                    }
+                                }
+                            }
+                            context.registerReceiver(receiver, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE))
+                        } else {
+                            updateMessage = "Estás en la última versión"
+                        }
+                    } catch (e: Exception) {
+                        isCheckingUpdate = false
+                        updateMessage = "Error: ${e.message}"
+                    }
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !isCheckingUpdate
+        ) {
+            Text(text = if (isCheckingUpdate) "Verificando..." else "🔄 Verificar actualizaciones")
+        }
+
+        if (updateMessage != null) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = updateMessage!!,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (updateMessage!!.startsWith("Error")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+            )
         }
 
         Spacer(modifier = Modifier.height(24.dp))
