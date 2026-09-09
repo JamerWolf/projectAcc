@@ -38,12 +38,18 @@ data class WhatsAppService(
     }
 
     /**
-     * Extracts the numeric value from valorCobrar or requisitos.
+     * Extracts the numeric value from valorCobrar, valor, or requisitos.
      */
     fun extractValor(): Int? {
+        // Try valorCobrar first
         val fromField = valorCobrar.replace(".", "").replace(",", "").replace("COP", "").trim().toIntOrNull()
         if (fromField != null && fromField > 0) return fromField
 
+        // Try valor field (e.g. "$19.485")
+        val fromValor = valor.replace("$", "").replace(".", "").replace(",", "").replace("COP", "").trim().toIntOrNull()
+        if (fromValor != null && fromValor > 0) return fromValor
+
+        // Try requisitos (e.g. "El valor a cobrar es: 180120")
         val fromRequisitos = Regex("valor a cobrar es:\\s*(\\d+)").find(requisitos.lowercase())
             ?.groupValues?.get(1)?.toIntOrNull()
         return fromRequisitos
