@@ -353,7 +353,7 @@ class MyAccessibilityService : AccessibilityService() {
                     }
                 }
 
-                handler.postDelayed(retryRunnable, 500)
+                handler.postDelayed(retryRunnable, 200)
             } else {
                 Log.w(TAG, "WHATSAPP: Campo de texto no encontrado")
             }
