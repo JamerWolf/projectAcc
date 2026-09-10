@@ -394,6 +394,7 @@ fun PicapContent(
     val scannedServiceIds by OrderStateManager.scannedServiceIds.collectAsState()
     val autoAcceptMaxKm by OrderStateManager.autoAcceptMaxKm.collectAsState()
     val isAutoAcceptByKmEnabled by OrderStateManager.isAutoAcceptByKmEnabled.collectAsState()
+    val isPicapAutoAcceptEnabled by OrderStateManager.isPicapAutoAcceptEnabled.collectAsState()
 
     Column(
         modifier = Modifier
@@ -472,6 +473,30 @@ fun PicapContent(
 
         Divider()
         Spacer(modifier = Modifier.height(8.dp))
+
+        // Switch de Auto-Aceptar Picap
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Auto-Aceptar orden",
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = if (isPicapAutoAcceptEnabled) "Buscando ordenes para aceptar..." else "Desactivado",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = isPicapAutoAcceptEnabled,
+                onCheckedChange = { OrderStateManager.setPicapAutoAcceptEnabled(it) }
+            )
+        }
+
+        Divider(modifier = Modifier.padding(vertical = 8.dp))
 
         // Switch de Auto-Aceptar por distancia
         Row(

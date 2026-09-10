@@ -155,7 +155,7 @@ class MyAccessibilityService : AccessibilityService() {
         val order = parseOrder(nodesContent)
 
         // --- AUTO-ACCEPT: Evaluar siempre que haya ID, sin importar si es la misma orden ---
-        if (order.id.isNotEmpty() && shouldAutoAccept(order)) {
+        if (OrderStateManager.isPicapAutoAcceptEnabled.value && order.id.isNotEmpty() && shouldAutoAccept(order)) {
             val now = System.currentTimeMillis()
             if (now - lastClickTime >= CLICK_COOLDOWN_MS) {
                 Log.d(TAG, "AUTO-ACCEPT: Orden califica para auto-acept. Buscando botón...")

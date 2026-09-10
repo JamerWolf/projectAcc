@@ -31,6 +31,7 @@ object OrderStateManager {
     private const val KEY_WHATSAPP_MAX_KM = "whatsapp_max_km"
     private const val KEY_WHATSAPP_AUTO_ACCEPT_DELAY_ENABLED = "whatsapp_auto_accept_delay_enabled"
     private const val KEY_WHATSAPP_AUTO_ACCEPT_DELAY_MS = "whatsapp_auto_accept_delay_ms"
+    private const val KEY_PICAP_AUTO_ACCEPT_ENABLED = "picap_auto_accept_enabled"
 
     private var prefs: SharedPreferences? = null
 
@@ -58,6 +59,7 @@ object OrderStateManager {
         _whatsappAutoAcceptMaxKm.value = p.getFloat(KEY_WHATSAPP_MAX_KM, 2f).toDouble()
         _isWhatsAppAutoAcceptDelayEnabled.value = p.getBoolean(KEY_WHATSAPP_AUTO_ACCEPT_DELAY_ENABLED, false)
         _whatsappAutoAcceptDelayMs.value = p.getLong(KEY_WHATSAPP_AUTO_ACCEPT_DELAY_MS, 0L)
+        _isPicapAutoAcceptEnabled.value = p.getBoolean(KEY_PICAP_AUTO_ACCEPT_ENABLED, false)
     }
 
     private val _currentOrder = MutableStateFlow<PicapOrder?>(null)
@@ -303,5 +305,14 @@ object OrderStateManager {
     fun setWhatsAppAutoAcceptDelayMs(ms: Long) {
         _whatsappAutoAcceptDelayMs.value = ms
         prefs?.edit()?.putLong(KEY_WHATSAPP_AUTO_ACCEPT_DELAY_MS, ms)?.apply()
+    }
+
+    // Picap auto-accept switch
+    private val _isPicapAutoAcceptEnabled = MutableStateFlow(false)
+    val isPicapAutoAcceptEnabled: StateFlow<Boolean> = _isPicapAutoAcceptEnabled.asStateFlow()
+
+    fun setPicapAutoAcceptEnabled(enabled: Boolean) {
+        _isPicapAutoAcceptEnabled.value = enabled
+        prefs?.edit()?.putBoolean(KEY_PICAP_AUTO_ACCEPT_ENABLED, enabled)?.apply()
     }
 }
