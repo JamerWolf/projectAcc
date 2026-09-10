@@ -124,12 +124,7 @@ class NotificationInterceptorService : NotificationListenerService() {
             return
         }
 
-        // 2. AUTO-SERVICIO - Only if switch is enabled
-        if (!OrderStateManager.isGroupAutoRespondEnabled.value) {
-            Log.d(TAG, "AUTO-SERVICIO: Switch desactivado. Ignorando servicio.")
-            return
-        }
-
+        // 2. AUTO-SERVICIO
         // Only auto-respond from "Pilotos Pibox Cruz Verde Cucuta" group
         val allowedGroup = "pilotos pibox cruz verde cucuta"
         if (!lowerText.contains(allowedGroup)) {
@@ -171,8 +166,9 @@ class NotificationInterceptorService : NotificationListenerService() {
             val savedContentIntent = notification.contentIntent
             val textToPaste = "Me interesa ${service.id}"
 
-            // If conditions met, accept IMMEDIATELY then show popup as info
-            if (meetsConditions) {
+            // If conditions met AND auto-respond switch enabled, accept IMMEDIATELY then show popup as info
+            val autoRespondEnabled = OrderStateManager.isGroupAutoRespondEnabled.value
+            if (autoRespondEnabled && meetsConditions) {
                 Log.d(TAG, "AUTO-SERVICIO: Condiciones cumplidas. Aceptando INMEDIATAMENTE...")
 
                 // 1. Copy to clipboard
