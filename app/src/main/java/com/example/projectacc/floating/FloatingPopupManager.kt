@@ -341,8 +341,9 @@ class FloatingPopupManager(private val context: Context) {
         // Auto-accept if enabled
         if (autoAccept) {
             Handler(Looper.getMainLooper()).postDelayed({
-                popupView?.findViewById<Button>(R.id.btnAccept)?.performClick()
                 Log.d("FloatingPopup", "Auto-accept triggered for service #${service.id}")
+                onAcceptCallback?.invoke(service)
+                dismiss()
             }, 500)
         }
     }
