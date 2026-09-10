@@ -166,30 +166,7 @@ class NotificationInterceptorService : NotificationListenerService() {
 
             Log.d(TAG, "AUTO-SERVICIO: valor=$valor, km=$kmRecogida, meetsConditions=$meetsConditions")
 
-            // If conditions met, accept directly without showing popup
-            if (meetsConditions) {
-                Log.d(TAG, "AUTO-SERVICIO: Condiciones cumplidas. Aceptando directamente...")
-                val textToPaste = "Me interesa ${service.id}"
-
-                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                val clip = android.content.ClipData.newPlainText("whatsapp_response", textToPaste)
-                clipboard.setPrimaryClip(clip)
-
-                val savedContentIntent = notification.contentIntent
-                if (savedContentIntent != null) {
-                    WhatsAppIntentHolder.pendingIntent = savedContentIntent
-                    WhatsAppIntentHolder.lastCopiedText = textToPaste
-                    val forwardIntent = Intent(this, WhatsAppForwardActivity::class.java).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        putExtra(WhatsAppForwardActivity.EXTRA_AUTO_SEND, true)
-                    }
-                    startActivity(forwardIntent)
-                    Log.d(TAG, "AUTO-SERVICIO: Aceptado directamente #${service.id}")
-                }
-                return
-            }
-
-            // Otherwise show popup for manual accept
+            // Show popup (auto-accept will trigger if conditions met)
             if (floatingPopup?.canDrawOverlays() == true) {
                 val savedContentIntent = notification.contentIntent
 
@@ -212,7 +189,7 @@ class NotificationInterceptorService : NotificationListenerService() {
                         startActivity(forwardIntent)
                         Log.d(TAG, "AUTO-SERVICIO: WhatsAppForwardActivity lanzada")
                     }
-                })
+                }, autoAccept = meetsConditions)
             }
         }
     }
