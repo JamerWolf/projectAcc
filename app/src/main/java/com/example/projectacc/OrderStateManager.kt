@@ -1,5 +1,7 @@
 package com.example.projectacc
 
+import android.content.Context
+import android.content.SharedPreferences
 import com.example.projectacc.model.WhatsAppService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -8,8 +10,52 @@ import kotlinx.coroutines.flow.asStateFlow
 /**
  * Singleton que gestiona el estado reactivo de la orden actual de Picap.
  * Usa StateFlow para que los composables de la UI puedan observar cambios.
+ * Usa SharedPreferences para persistir configuración entre sesiones.
  */
 object OrderStateManager {
+    private const val PREFS_NAME = "projectacc_prefs"
+    private const val KEY_VEHICLE_PLATE = "vehicle_plate"
+    private const val KEY_AUTO_PLATE_ENABLED = "auto_plate_enabled"
+    private const val KEY_GROUP_AUTO_RESPOND = "group_auto_respond"
+    private const val KEY_SHOW_POPUP = "show_popup"
+    private const val KEY_POPUP_SOUND = "popup_sound"
+    private const val KEY_AUTO_ACCEPT_MIN_GANANCIA1 = "auto_accept_min_ganancia1"
+    private const val KEY_AUTO_ACCEPT_MIN_GANANCIA2 = "auto_accept_min_ganancia2"
+    private const val KEY_AUTO_ACCEPT_MAX_KM_COND2 = "auto_accept_max_km_cond2"
+    private const val KEY_AUTO_ACCEPT_BY_KM = "auto_accept_by_km"
+    private const val KEY_AUTO_ACCEPT_MAX_KM = "auto_accept_max_km"
+    private const val KEY_WHATSAPP_MIN_GANANCIA1 = "whatsapp_min_ganancia1"
+    private const val KEY_WHATSAPP_MIN_GANANCIA2 = "whatsapp_min_ganancia2"
+    private const val KEY_WHATSAPP_MAX_KM_COND2 = "whatsapp_max_km_cond2"
+    private const val KEY_WHATSAPP_AUTO_ACCEPT_BY_KM = "whatsapp_auto_accept_by_km"
+    private const val KEY_WHATSAPP_MAX_KM = "whatsapp_max_km"
+
+    private var prefs: SharedPreferences? = null
+
+    fun init(context: Context) {
+        prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        loadAll()
+    }
+
+    private fun loadAll() {
+        val p = prefs ?: return
+        _vehiclePlate.value = p.getString(KEY_VEHICLE_PLATE, "") ?: ""
+        _isAutoPlateEnabled.value = p.getBoolean(KEY_AUTO_PLATE_ENABLED, false)
+        _isGroupAutoRespondEnabled.value = p.getBoolean(KEY_GROUP_AUTO_RESPOND, false)
+        _isWhatsAppShowPopupEnabled.value = p.getBoolean(KEY_SHOW_POPUP, false)
+        _isPopupSoundEnabled.value = p.getBoolean(KEY_POPUP_SOUND, true)
+        _autoAcceptMinGanancia1.value = p.getFloat(KEY_AUTO_ACCEPT_MIN_GANANCIA1, 18000f).toDouble()
+        _autoAcceptMinGanancia2.value = p.getFloat(KEY_AUTO_ACCEPT_MIN_GANANCIA2, 14000f).toDouble()
+        _autoAcceptMaxKmCond2.value = p.getFloat(KEY_AUTO_ACCEPT_MAX_KM_COND2, 4.5f).toDouble()
+        _isAutoAcceptByKmEnabled.value = p.getBoolean(KEY_AUTO_ACCEPT_BY_KM, false)
+        _autoAcceptMaxKm.value = p.getFloat(KEY_AUTO_ACCEPT_MAX_KM, 2f).toDouble()
+        _whatsappAutoAcceptMinGanancia1.value = p.getFloat(KEY_WHATSAPP_MIN_GANANCIA1, 18000f).toDouble()
+        _whatsappAutoAcceptMinGanancia2.value = p.getFloat(KEY_WHATSAPP_MIN_GANANCIA2, 14000f).toDouble()
+        _whatsappAutoAcceptMaxKmCond2.value = p.getFloat(KEY_WHATSAPP_MAX_KM_COND2, 4.5f).toDouble()
+        _isWhatsappAutoAcceptByKmEnabled.value = p.getBoolean(KEY_WHATSAPP_AUTO_ACCEPT_BY_KM, false)
+        _whatsappAutoAcceptMaxKm.value = p.getFloat(KEY_WHATSAPP_MAX_KM, 2f).toDouble()
+    }
+
     private val _currentOrder = MutableStateFlow<PicapOrder?>(null)
     val currentOrder: StateFlow<PicapOrder?> = _currentOrder.asStateFlow()
 
@@ -56,6 +102,7 @@ object OrderStateManager {
 
     fun setAutoAcceptMaxKm(km: Double) {
         _autoAcceptMaxKm.value = km
+        prefs?.edit()?.putFloat(KEY_AUTO_ACCEPT_MAX_KM, km.toFloat())?.apply()
     }
 
     private val _isAutoAcceptByKmEnabled = MutableStateFlow(false)
@@ -63,6 +110,7 @@ object OrderStateManager {
 
     fun setAutoAcceptByKmEnabled(enabled: Boolean) {
         _isAutoAcceptByKmEnabled.value = enabled
+        prefs?.edit()?.putBoolean(KEY_AUTO_ACCEPT_BY_KM, enabled)?.apply()
     }
 
     // Auto-accept ganancia condition 1 (accept always)
@@ -71,6 +119,7 @@ object OrderStateManager {
 
     fun setAutoAcceptMinGanancia1(ganancia: Double) {
         _autoAcceptMinGanancia1.value = ganancia
+        prefs?.edit()?.putFloat(KEY_AUTO_ACCEPT_MIN_GANANCIA1, ganancia.toFloat())?.apply()
     }
 
     // Auto-accept ganancia condition 2 (ganancia + km)
@@ -79,6 +128,7 @@ object OrderStateManager {
 
     fun setAutoAcceptMinGanancia2(ganancia: Double) {
         _autoAcceptMinGanancia2.value = ganancia
+        prefs?.edit()?.putFloat(KEY_AUTO_ACCEPT_MIN_GANANCIA2, ganancia.toFloat())?.apply()
     }
 
     // Auto-accept max km for condition 2
@@ -87,6 +137,7 @@ object OrderStateManager {
 
     fun setAutoAcceptMaxKmCond2(km: Double) {
         _autoAcceptMaxKmCond2.value = km
+        prefs?.edit()?.putFloat(KEY_AUTO_ACCEPT_MAX_KM_COND2, km.toFloat())?.apply()
     }
 
     // WhatsApp orders
@@ -153,6 +204,7 @@ object OrderStateManager {
 
     fun setVehiclePlate(plate: String) {
         _vehiclePlate.value = plate
+        prefs?.edit()?.putString(KEY_VEHICLE_PLATE, plate)?.apply()
     }
 
     // WhatsApp auto-plate (auto-paste plate on private message)
@@ -161,6 +213,7 @@ object OrderStateManager {
 
     fun setAutoPlateEnabled(enabled: Boolean) {
         _isAutoPlateEnabled.value = enabled
+        prefs?.edit()?.putBoolean(KEY_AUTO_PLATE_ENABLED, enabled)?.apply()
     }
 
     // WhatsApp group auto-respond (auto-send "Me interesa {code}")
@@ -169,6 +222,7 @@ object OrderStateManager {
 
     fun setGroupAutoRespondEnabled(enabled: Boolean) {
         _isGroupAutoRespondEnabled.value = enabled
+        prefs?.edit()?.putBoolean(KEY_GROUP_AUTO_RESPOND, enabled)?.apply()
     }
 
     // WhatsApp show popup (show floating popup when service is detected)
@@ -177,6 +231,7 @@ object OrderStateManager {
 
     fun setWhatsAppShowPopupEnabled(enabled: Boolean) {
         _isWhatsAppShowPopupEnabled.value = enabled
+        prefs?.edit()?.putBoolean(KEY_SHOW_POPUP, enabled)?.apply()
     }
 
     // WhatsApp auto-accept settings (same conditions as Picap)
@@ -185,6 +240,7 @@ object OrderStateManager {
 
     fun setWhatsappAutoAcceptMinGanancia1(ganancia: Double) {
         _whatsappAutoAcceptMinGanancia1.value = ganancia
+        prefs?.edit()?.putFloat(KEY_WHATSAPP_MIN_GANANCIA1, ganancia.toFloat())?.apply()
     }
 
     private val _whatsappAutoAcceptMinGanancia2 = MutableStateFlow(14000.0)
@@ -192,6 +248,7 @@ object OrderStateManager {
 
     fun setWhatsappAutoAcceptMinGanancia2(ganancia: Double) {
         _whatsappAutoAcceptMinGanancia2.value = ganancia
+        prefs?.edit()?.putFloat(KEY_WHATSAPP_MIN_GANANCIA2, ganancia.toFloat())?.apply()
     }
 
     private val _whatsappAutoAcceptMaxKmCond2 = MutableStateFlow(4.5)
@@ -199,6 +256,7 @@ object OrderStateManager {
 
     fun setWhatsappAutoAcceptMaxKmCond2(km: Double) {
         _whatsappAutoAcceptMaxKmCond2.value = km
+        prefs?.edit()?.putFloat(KEY_WHATSAPP_MAX_KM_COND2, km.toFloat())?.apply()
     }
 
     private val _isWhatsappAutoAcceptByKmEnabled = MutableStateFlow(false)
@@ -206,6 +264,7 @@ object OrderStateManager {
 
     fun setWhatsappAutoAcceptByKmEnabled(enabled: Boolean) {
         _isWhatsappAutoAcceptByKmEnabled.value = enabled
+        prefs?.edit()?.putBoolean(KEY_WHATSAPP_AUTO_ACCEPT_BY_KM, enabled)?.apply()
     }
 
     private val _whatsappAutoAcceptMaxKm = MutableStateFlow(2.0)
@@ -213,6 +272,7 @@ object OrderStateManager {
 
     fun setWhatsappAutoAcceptMaxKm(km: Double) {
         _whatsappAutoAcceptMaxKm.value = km
+        prefs?.edit()?.putFloat(KEY_WHATSAPP_MAX_KM, km.toFloat())?.apply()
     }
 
     // Popup sound
@@ -221,5 +281,6 @@ object OrderStateManager {
 
     fun setPopupSoundEnabled(enabled: Boolean) {
         _isPopupSoundEnabled.value = enabled
+        prefs?.edit()?.putBoolean(KEY_POPUP_SOUND, enabled)?.apply()
     }
 }

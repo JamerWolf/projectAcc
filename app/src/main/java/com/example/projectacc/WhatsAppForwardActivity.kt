@@ -84,7 +84,7 @@ class WhatsAppForwardActivity : Activity() {
             }
         }
 
-        handler.postDelayed(pollRunnable!!, 500)
+        handler.postDelayed(pollRunnable!!, 0)
     }
 
     override fun onDestroy() {
