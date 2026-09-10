@@ -29,6 +29,8 @@ object OrderStateManager {
     private const val KEY_WHATSAPP_MAX_KM_COND2 = "whatsapp_max_km_cond2"
     private const val KEY_WHATSAPP_AUTO_ACCEPT_BY_KM = "whatsapp_auto_accept_by_km"
     private const val KEY_WHATSAPP_MAX_KM = "whatsapp_max_km"
+    private const val KEY_WHATSAPP_AUTO_ACCEPT_DELAY_ENABLED = "whatsapp_auto_accept_delay_enabled"
+    private const val KEY_WHATSAPP_AUTO_ACCEPT_DELAY_MS = "whatsapp_auto_accept_delay_ms"
 
     private var prefs: SharedPreferences? = null
 
@@ -54,6 +56,8 @@ object OrderStateManager {
         _whatsappAutoAcceptMaxKmCond2.value = p.getFloat(KEY_WHATSAPP_MAX_KM_COND2, 4.5f).toDouble()
         _isWhatsappAutoAcceptByKmEnabled.value = p.getBoolean(KEY_WHATSAPP_AUTO_ACCEPT_BY_KM, false)
         _whatsappAutoAcceptMaxKm.value = p.getFloat(KEY_WHATSAPP_MAX_KM, 2f).toDouble()
+        _isWhatsAppAutoAcceptDelayEnabled.value = p.getBoolean(KEY_WHATSAPP_AUTO_ACCEPT_DELAY_ENABLED, false)
+        _whatsappAutoAcceptDelayMs.value = p.getLong(KEY_WHATSAPP_AUTO_ACCEPT_DELAY_MS, 0L)
     }
 
     private val _currentOrder = MutableStateFlow<PicapOrder?>(null)
@@ -282,5 +286,22 @@ object OrderStateManager {
     fun setPopupSoundEnabled(enabled: Boolean) {
         _isPopupSoundEnabled.value = enabled
         prefs?.edit()?.putBoolean(KEY_POPUP_SOUND, enabled)?.apply()
+    }
+
+    // WhatsApp auto-accept delay (AccessibilityService only)
+    private val _isWhatsAppAutoAcceptDelayEnabled = MutableStateFlow(false)
+    val isWhatsAppAutoAcceptDelayEnabled: StateFlow<Boolean> = _isWhatsAppAutoAcceptDelayEnabled.asStateFlow()
+
+    fun setWhatsAppAutoAcceptDelayEnabled(enabled: Boolean) {
+        _isWhatsAppAutoAcceptDelayEnabled.value = enabled
+        prefs?.edit()?.putBoolean(KEY_WHATSAPP_AUTO_ACCEPT_DELAY_ENABLED, enabled)?.apply()
+    }
+
+    private val _whatsappAutoAcceptDelayMs = MutableStateFlow(0L)
+    val whatsappAutoAcceptDelayMs: StateFlow<Long> = _whatsappAutoAcceptDelayMs.asStateFlow()
+
+    fun setWhatsAppAutoAcceptDelayMs(ms: Long) {
+        _whatsappAutoAcceptDelayMs.value = ms
+        prefs?.edit()?.putLong(KEY_WHATSAPP_AUTO_ACCEPT_DELAY_MS, ms)?.apply()
     }
 }

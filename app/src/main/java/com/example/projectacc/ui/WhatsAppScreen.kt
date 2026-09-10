@@ -12,11 +12,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Divider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -32,6 +36,8 @@ fun WhatsAppScreen(modifier: Modifier = Modifier) {
     val isShowPopup by OrderStateManager.isWhatsAppShowPopupEnabled.collectAsState()
     val isAutoPlate by OrderStateManager.isAutoPlateEnabled.collectAsState()
     val vehiclePlate by OrderStateManager.vehiclePlate.collectAsState()
+    val isDelayEnabled by OrderStateManager.isWhatsAppAutoAcceptDelayEnabled.collectAsState()
+    val delayMs by OrderStateManager.whatsappAutoAcceptDelayMs.collectAsState()
 
     Column(
         modifier = modifier
@@ -118,6 +124,49 @@ fun WhatsAppScreen(modifier: Modifier = Modifier) {
                 checked = isAutoPlate,
                 onCheckedChange = { OrderStateManager.setAutoPlateEnabled(it) }
             )
+        }
+
+        Divider(modifier = Modifier.padding(vertical = 8.dp))
+
+        // Auto-accept delay switch (AccessibilityService only)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Delay auto-aceptar (ms)",
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = if (isDelayEnabled) "Esperando ${delayMs}ms antes de aceptar" else "Desactivado (inmediato)",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = isDelayEnabled,
+                onCheckedChange = { OrderStateManager.setWhatsAppAutoAcceptDelayEnabled(it) }
+            )
+        }
+
+        if (isDelayEnabled) {
+            var sliderPosition by remember { mutableFloatStateOf(delayMs.toFloat()) }
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Slider(
+                    value = sliderPosition,
+                    onValueChange = { sliderPosition = it },
+                    onValueChangeFinished = { OrderStateManager.setWhatsAppAutoAcceptDelayMs(sliderPosition.toLong()) },
+                    valueRange = 0f..5000f,
+                    steps = 49,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    text = "${delayMs}ms",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(16.dp))

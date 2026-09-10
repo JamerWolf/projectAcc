@@ -290,8 +290,18 @@ class MyAccessibilityService : AccessibilityService() {
 
         // Auto-respond if enabled AND conditions are met
         if (autoRespondEnabled && meetsConditions) {
-            Log.d(TAG, "WHATSAPP: Auto-aceptar: valor $valor, km $kmRecogida")
-            pasteAndSend("Me interesa ${service.id}")
+            val delayMs = OrderStateManager.whatsappAutoAcceptDelayMs.value
+            val delayEnabled = OrderStateManager.isWhatsAppAutoAcceptDelayEnabled.value
+            val effectiveDelay = if (delayEnabled) delayMs else 0L
+
+            Log.d(TAG, "WHATSAPP: Auto-aceptar: valor $valor, km $kmRecogida, delay ${effectiveDelay}ms")
+            if (effectiveDelay > 0) {
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                    pasteAndSend("Me interesa ${service.id}")
+                }, effectiveDelay)
+            } else {
+                pasteAndSend("Me interesa ${service.id}")
+            }
             return
         }
 
