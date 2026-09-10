@@ -190,7 +190,7 @@ class NotificationInterceptorService : NotificationListenerService() {
                 }
 
                 // 3. Show popup as informational only (auto-accept = false, just display)
-                if (floatingPopup?.canDrawOverlays() == true) {
+                if (OrderStateManager.isWhatsAppShowPopupEnabled.value && floatingPopup?.canDrawOverlays() == true) {
                     Handler(Looper.getMainLooper()).post {
                         floatingPopup?.show(service, onAccept = {}, autoAccept = false)
                     }
@@ -199,7 +199,7 @@ class NotificationInterceptorService : NotificationListenerService() {
             }
 
             // Otherwise show popup for manual accept
-            if (floatingPopup?.canDrawOverlays() == true) {
+            if (OrderStateManager.isWhatsAppShowPopupEnabled.value && floatingPopup?.canDrawOverlays() == true) {
                 floatingPopup?.show(service, onAccept = { acceptedService ->
                     Log.d(TAG, "AUTO-SERVICIO: Popup aceptado para #${acceptedService.id}")
 
