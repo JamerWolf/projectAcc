@@ -58,7 +58,8 @@ class FloatingPopupManager(private val context: Context) {
     @SuppressLint("ClickableViewAccessibility")
     fun show(
         service: WhatsAppService,
-        onAccept: (WhatsAppService) -> Unit
+        onAccept: (WhatsAppService) -> Unit,
+        autoAccept: Boolean = false
     ) {
         if (!canDrawOverlays()) return
         if (popupView != null) dismiss()
@@ -335,6 +336,14 @@ class FloatingPopupManager(private val context: Context) {
             } catch (e: Exception) {
                 android.util.Log.e("FloatingPopup", "Error playing sound: ${e.message}")
             }
+        }
+
+        // Auto-accept if enabled
+        if (autoAccept) {
+            Handler(Looper.getMainLooper()).postDelayed({
+                popupView?.findViewById<Button>(R.id.btnAccept)?.performClick()
+                Log.d("FloatingPopup", "Auto-accept triggered for service #${service.id}")
+            }, 500)
         }
     }
 

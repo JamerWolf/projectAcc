@@ -151,7 +151,7 @@ class NotificationInterceptorService : NotificationListenerService() {
             if (floatingPopup?.canDrawOverlays() == true) {
                 val savedContentIntent = notification.contentIntent
 
-                floatingPopup?.show(service) { acceptedService ->
+                floatingPopup?.show(service, onAccept = { acceptedService ->
                     Log.d(TAG, "AUTO-SERVICIO: Popup aceptado para #${acceptedService.id}")
 
                     val textToPaste = "Me interesa ${acceptedService.id}"
@@ -170,7 +170,7 @@ class NotificationInterceptorService : NotificationListenerService() {
                         startActivity(forwardIntent)
                         Log.d(TAG, "AUTO-SERVICIO: WhatsAppForwardActivity lanzada")
                     }
-                }
+                })
             }
         }
     }

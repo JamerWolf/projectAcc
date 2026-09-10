@@ -296,11 +296,12 @@ class MyAccessibilityService : AccessibilityService() {
         }
 
         // Show floating popup if enabled (post to main thread for UI)
+        // Auto-accept popup if conditions are met
         if (showPopupEnabled && floatingPopup?.canDrawOverlays() == true) {
             withContext(Dispatchers.Main) {
-                floatingPopup?.show(service) { acceptedService ->
+                floatingPopup?.show(service, onAccept = { acceptedService ->
                     pasteAndSend("Me interesa ${acceptedService.id}")
-                }
+                }, autoAccept = meetsConditions)
             }
         }
     }
