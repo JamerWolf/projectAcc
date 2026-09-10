@@ -293,14 +293,15 @@ class MyAccessibilityService : AccessibilityService() {
             val delayMs = OrderStateManager.whatsappAutoAcceptDelayMs.value
             val delayEnabled = OrderStateManager.isWhatsAppAutoAcceptDelayEnabled.value
             val effectiveDelay = if (delayEnabled) delayMs else 0L
+            val detectedAt = System.currentTimeMillis()
 
             Log.d(TAG, "WHATSAPP: Auto-aceptar: valor $valor, km $kmRecogida, delay ${effectiveDelay}ms")
             if (effectiveDelay > 0) {
                 android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                    pasteAndSend("Me interesa ${service.id}")
+                    pasteAndSend("Me interesa ${service.id}", detectedAt)
                 }, effectiveDelay)
             } else {
-                pasteAndSend("Me interesa ${service.id}")
+                pasteAndSend("Me interesa ${service.id}", detectedAt)
             }
             return
         }
@@ -355,7 +356,7 @@ class MyAccessibilityService : AccessibilityService() {
      * Copies text to clipboard, then performs paste + send on the current WhatsApp input.
      * Uses retry mechanism for cases where multiple messages come in simultaneously.
      */
-    fun pasteAndSend(text: String) {
+    fun pasteAndSend(text: String, notificationTimestamp: Long = 0L) {
         Log.d(TAG, "WHATSAPP: pasteAndSend called: $text")
         try {
             val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -385,7 +386,11 @@ class MyAccessibilityService : AccessibilityService() {
                         val sendBtn = findSendButton(root)
                         if (sendBtn != null) {
                             sendBtn.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                            val elapsed = if (notificationTimestamp > 0) System.currentTimeMillis() - notificationTimestamp else 0L
                             Log.d(TAG, "WHATSAPP: Mensaje enviado (intento #$attempts): $text")
+                            if (notificationTimestamp > 0) {
+                                Log.i(TAG, "WHATSAPP: ⏱️ Tiempo notificación → envío: ${elapsed}ms")
+                            }
                             sendBtn.recycle()
                             root.recycle()
                         } else {

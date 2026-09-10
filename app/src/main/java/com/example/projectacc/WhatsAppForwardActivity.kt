@@ -65,8 +65,10 @@ class WhatsAppForwardActivity : Activity() {
                 val accessibilityService = MyAccessibilityService.instance
                 if (accessibilityService != null && accessibilityService.hasTextInput()) {
                     Log.d("WhatsAppForward", "Campo de texto detectado en intento #$attempts")
+                    val timestamp = WhatsAppIntentHolder.notificationReceivedAt
+                    WhatsAppIntentHolder.notificationReceivedAt = 0L
                     if (autoSend) {
-                        accessibilityService.pasteAndSend(text)
+                        accessibilityService.pasteAndSend(text, timestamp)
                     } else {
                         accessibilityService.pasteOnly(text)
                     }

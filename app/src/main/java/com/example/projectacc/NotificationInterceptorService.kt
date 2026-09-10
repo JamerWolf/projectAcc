@@ -84,6 +84,7 @@ class NotificationInterceptorService : NotificationListenerService() {
 
         val fullText = "$title $text"
         val lowerText = fullText.lowercase()
+        val notificationTimestamp = System.currentTimeMillis()
         Log.d(TAG, "WhatsApp notificación: titulo='$title', texto='$text'")
 
         // 1. AUTO-PLACA
@@ -184,6 +185,7 @@ class NotificationInterceptorService : NotificationListenerService() {
                 if (savedContentIntent != null) {
                     WhatsAppIntentHolder.pendingIntent = savedContentIntent
                     WhatsAppIntentHolder.lastCopiedText = textToPaste
+                    WhatsAppIntentHolder.notificationReceivedAt = notificationTimestamp
                     val forwardIntent = Intent(this, WhatsAppForwardActivity::class.java).apply {
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         putExtra(WhatsAppForwardActivity.EXTRA_AUTO_SEND, true)
@@ -213,6 +215,7 @@ class NotificationInterceptorService : NotificationListenerService() {
                     if (savedContentIntent != null) {
                         WhatsAppIntentHolder.pendingIntent = savedContentIntent
                         WhatsAppIntentHolder.lastCopiedText = textToPaste
+                        WhatsAppIntentHolder.notificationReceivedAt = notificationTimestamp
                         val forwardIntent = Intent(this, WhatsAppForwardActivity::class.java)
                         forwardIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         startActivity(forwardIntent)

@@ -9,9 +9,11 @@ import android.app.PendingIntent
 object WhatsAppIntentHolder {
     var pendingIntent: PendingIntent? = null
     var lastCopiedText: String? = null
+    var notificationReceivedAt: Long = 0L
 
     fun clear() {
         pendingIntent = null
         lastCopiedText = null
+        notificationReceivedAt = 0L
     }
 }
