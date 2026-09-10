@@ -148,6 +148,24 @@ class NotificationInterceptorService : NotificationListenerService() {
             OrderStateManager.setWhatsAppOrder(service)
             OrderStateManager.addScannedWhatsAppServiceId(service.id)
 
+            // Check if service meets auto-accept conditions
+            val valor = service.extractValor() ?: 0
+            val minGanancia1 = OrderStateManager.whatsappAutoAcceptMinGanancia1.value
+            val minGanancia2 = OrderStateManager.whatsappAutoAcceptMinGanancia2.value
+            val maxKmCond2 = OrderStateManager.whatsappAutoAcceptMaxKmCond2.value
+            val isKmEnabled = OrderStateManager.isWhatsappAutoAcceptByKmEnabled.value
+            val maxKm = OrderStateManager.whatsappAutoAcceptMaxKm.value
+
+            // Extract km from origen
+            val match = Regex("([\\d.,]+)\\s*km", RegexOption.IGNORE_CASE).find(service.origen)
+            val kmRecogida = match?.groupValues?.get(1)?.replace(",", ".")?.toDoubleOrNull()
+
+            val meetsConditions = valor >= minGanancia1 ||
+                (kmRecogida != null && kmRecogida <= maxKmCond2 && valor >= minGanancia2) ||
+                (isKmEnabled && kmRecogida != null && (maxKm >= 5.0 || kmRecogida <= maxKm))
+
+            Log.d(TAG, "AUTO-SERVICIO: valor=$valor, km=$kmRecogida, meetsConditions=$meetsConditions")
+
             if (floatingPopup?.canDrawOverlays() == true) {
                 val savedContentIntent = notification.contentIntent
 
@@ -170,7 +188,7 @@ class NotificationInterceptorService : NotificationListenerService() {
                         startActivity(forwardIntent)
                         Log.d(TAG, "AUTO-SERVICIO: WhatsAppForwardActivity lanzada")
                     }
-                })
+                }, autoAccept = meetsConditions)
             }
         }
     }
