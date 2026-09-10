@@ -14,7 +14,6 @@ import com.example.projectacc.parser.WhatsAppParser
 class NotificationInterceptorService : NotificationListenerService() {
     private val TAG = "NotificationInterceptor"
 
-    private val plateRequestPatterns = listOf("placa", "vehiculo", "vehículo", "ascopec", "tarjeta de propietario")
     private val plateRequestExactPhrases = listOf("envíame la placa de tu vehículo", "enviame la placa de tu vehiculo")
     private var floatingPopup: FloatingPopupManager? = null
 
@@ -91,10 +90,9 @@ class NotificationInterceptorService : NotificationListenerService() {
         if (OrderStateManager.isAutoPlateEnabled.value) {
             val plate = OrderStateManager.vehiclePlate.value
             if (plate.isNotEmpty()) {
-                val isPlateRequest = plateRequestPatterns.any { pattern -> lowerText.contains(pattern) }
                 val isExactPhrase = plateRequestExactPhrases.any { phrase -> lowerText.contains(phrase) }
-                if (isPlateRequest || isExactPhrase) {
-                    Log.d(TAG, "AUTO-PLACA: Solicitud de placa detectada. Abriendo chat y pegando placa...")
+                if (isExactPhrase) {
+                    Log.d(TAG, "AUTO-PLACA: Solicitud de placa detectada. Abriendo chat y enviando placa...")
 
                     // Copy plate to clipboard
                     val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
@@ -102,17 +100,16 @@ class NotificationInterceptorService : NotificationListenerService() {
                     clipboard.setPrimaryClip(clip)
 
                     // Save PendingIntent and launch forward activity
-                    // Auto-send if exact phrase match, otherwise just paste
                     val savedContentIntent = notification.contentIntent
                     if (savedContentIntent != null) {
                         WhatsAppIntentHolder.pendingIntent = savedContentIntent
                         WhatsAppIntentHolder.lastCopiedText = plate
                         val forwardIntent = Intent(this, WhatsAppForwardActivity::class.java).apply {
                             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            putExtra(WhatsAppForwardActivity.EXTRA_AUTO_SEND, isExactPhrase)
+                            putExtra(WhatsAppForwardActivity.EXTRA_AUTO_SEND, true)
                         }
                         startActivity(forwardIntent)
-                        Log.d(TAG, "AUTO-PLACA: WhatsAppForwardActivity lanzada (auto-send: $isExactPhrase)")
+                        Log.d(TAG, "AUTO-PLACA: WhatsAppForwardActivity lanzada (auto-send: true)")
                     }
                     return
                 }

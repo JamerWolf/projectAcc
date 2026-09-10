@@ -84,9 +84,6 @@ class MyAccessibilityService : AccessibilityService() {
     private var lastClickTime: Long = 0L
     private val CLICK_COOLDOWN_MS = 2000L
 
-    // Plate request patterns for response detection
-    private val plateRequestPatterns = listOf("placa", "vehiculo", "vehículo", "ascopec", "tarjeta de propietario")
-
     override fun onCreate() {
         super.onCreate()
         instance = this
