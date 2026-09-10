@@ -3,6 +3,8 @@ package com.example.projectacc
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.os.Handler
+import android.os.Looper
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
@@ -166,21 +168,48 @@ class NotificationInterceptorService : NotificationListenerService() {
 
             Log.d(TAG, "AUTO-SERVICIO: valor=$valor, km=$kmRecogida, meetsConditions=$meetsConditions")
 
-            // Show popup (auto-accept will trigger if conditions met)
-            if (floatingPopup?.canDrawOverlays() == true) {
-                val savedContentIntent = notification.contentIntent
+            val savedContentIntent = notification.contentIntent
+            val textToPaste = "Me interesa ${service.id}"
 
+            // If conditions met, accept IMMEDIATELY then show popup as info
+            if (meetsConditions) {
+                Log.d(TAG, "AUTO-SERVICIO: Condiciones cumplidas. Aceptando INMEDIATAMENTE...")
+
+                // 1. Copy to clipboard
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                val clip = android.content.ClipData.newPlainText("whatsapp_response", textToPaste)
+                clipboard.setPrimaryClip(clip)
+
+                // 2. Launch WhatsApp to send
+                if (savedContentIntent != null) {
+                    WhatsAppIntentHolder.pendingIntent = savedContentIntent
+                    WhatsAppIntentHolder.lastCopiedText = textToPaste
+                    val forwardIntent = Intent(this, WhatsAppForwardActivity::class.java).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        putExtra(WhatsAppForwardActivity.EXTRA_AUTO_SEND, true)
+                    }
+                    startActivity(forwardIntent)
+                    Log.d(TAG, "AUTO-SERVICIO: Aceptado INMEDIATAMENTE #${service.id}")
+                }
+
+                // 3. Show popup as informational only (auto-accept = false, just display)
+                if (floatingPopup?.canDrawOverlays() == true) {
+                    Handler(Looper.getMainLooper()).post {
+                        floatingPopup?.show(service, onAccept = {}, autoAccept = false)
+                    }
+                }
+                return
+            }
+
+            // Otherwise show popup for manual accept
+            if (floatingPopup?.canDrawOverlays() == true) {
                 floatingPopup?.show(service, onAccept = { acceptedService ->
                     Log.d(TAG, "AUTO-SERVICIO: Popup aceptado para #${acceptedService.id}")
 
-                    val textToPaste = "Me interesa ${acceptedService.id}"
-
-                    // 1. Copiar al portapapeles
                     val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                     val clip = android.content.ClipData.newPlainText("whatsapp_response", textToPaste)
                     clipboard.setPrimaryClip(clip)
 
-                    // 2. Guardar PendingIntent y texto, abrir WhatsApp
                     if (savedContentIntent != null) {
                         WhatsAppIntentHolder.pendingIntent = savedContentIntent
                         WhatsAppIntentHolder.lastCopiedText = textToPaste
@@ -189,7 +218,7 @@ class NotificationInterceptorService : NotificationListenerService() {
                         startActivity(forwardIntent)
                         Log.d(TAG, "AUTO-SERVICIO: WhatsAppForwardActivity lanzada")
                     }
-                }, autoAccept = meetsConditions)
+                })
             }
         }
     }
