@@ -105,6 +105,7 @@ class MyAccessibilityService : AccessibilityService() {
         // === PICAP HANDLING ===
         if (packageName == "co.picap.passenger") {
             handlePicapEvent(event)
+            handlePossiblePicapPopup(event)
             return
         }
 
@@ -115,7 +116,7 @@ class MyAccessibilityService : AccessibilityService() {
         }
 
         // === UNKNOWN PACKAGE: Check if it's a Picap popup from notification ===
-        handlePossiblePicapPopup(event)
+
     }
 
     /**
@@ -123,45 +124,39 @@ class MyAccessibilityService : AccessibilityService() {
      * triggered by notification clicks when user is outside Picap.
      */
     private fun handlePossiblePicapPopup(event: AccessibilityEvent) {
-        // Search through all windows to find one that matches Picap format
-        var picapWindow: android.view.accessibility.AccessibilityWindowInfo? = null
-        var nodesContent: MutableList<String>? = null
+        Log.d(TAG, "handlePossiblePicapPopup")
+        // Delay to allow Picap window to become active after notification click
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            val rootNode = rootInActiveWindow ?: return@postDelayed
 
-        for (window in windows) {
-            val root = window.root ?: continue
-            val content = mutableListOf<String>()
-            flattenContentDescriptions(root, content)
+            // Extract all text content
+            val nodesContent = mutableListOf<String>()
+            flattenContentDescriptions(rootNode, nodesContent)
+            rootNode.recycle()
 
-            if (looksLikePicapPopup(content)) {
-                picapWindow = window
-                nodesContent = content
-                root.recycle()
-                break
+            // Check if this window matches Picap format
+            if (!looksLikePicapPopup(nodesContent)) return@postDelayed
+
+            Log.d(TAG, "POSSIBLE PICAP POPUP detected from package: ${event.packageName}")
+
+            // Parse as Picap order
+            val order = parseOrder(nodesContent)
+
+            // Update UI if it's a new order
+            if (order.id.isNotEmpty() && order.id != lastOrder?.id) {
+                lastOrder = order
+                OrderStateManager.setOrder(order)
+
+                val summary = """
+                    
+                    ORDEN CAPTURADA (popup) [#${order.id}]:
+                    Ganancia: ${order.ganancia}
+                    Recogida: ${order.direccionRecogida} (${order.tiempoRecogida})
+                    Entrega:  ${order.direccionEntrega} (${order.tiempoEntrega})
+                """.trimIndent()
+                Log.i(TAG, summary)
             }
-            root.recycle()
-        }
-
-        if (picapWindow == null || nodesContent == null) return
-
-        Log.d(TAG, "POSSIBLE PICAP POPUP detected from package: ${event.packageName}")
-
-        // Parse as Picap order
-        val order = parseOrder(nodesContent)
-
-        // Update UI if it's a new order
-        if (order.id.isNotEmpty() && order.id != lastOrder?.id) {
-            lastOrder = order
-            OrderStateManager.setOrder(order)
-
-            val summary = """
-                
-                ORDEN CAPTURADA (popup) [#${order.id}]:
-                Ganancia: ${order.ganancia}
-                Recogida: ${order.direccionRecogida} (${order.tiempoRecogida})
-                Entrega:  ${order.direccionEntrega} (${order.tiempoEntrega})
-            """.trimIndent()
-            Log.i(TAG, summary)
-        }
+        }, 1000L)
     }
 
     /**
