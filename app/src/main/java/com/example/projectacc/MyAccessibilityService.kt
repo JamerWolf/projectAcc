@@ -123,15 +123,25 @@ class MyAccessibilityService : AccessibilityService() {
      * triggered by notification clicks when user is outside Picap.
      */
     private fun handlePossiblePicapPopup(event: AccessibilityEvent) {
-        val rootNode = rootInActiveWindow ?: return
+        // Search through all windows to find one that matches Picap format
+        var picapWindow: android.view.accessibility.AccessibilityWindowInfo? = null
+        var nodesContent: MutableList<String>? = null
 
-        // Extract all text content
-        val nodesContent = mutableListOf<String>()
-        flattenContentDescriptions(rootNode, nodesContent)
-        rootNode.recycle()
+        for (window in windows) {
+            val root = window.root ?: continue
+            val content = mutableListOf<String>()
+            flattenContentDescriptions(root, content)
 
-        // Check if this window matches Picap format
-        if (!looksLikePicapPopup(nodesContent)) return
+            if (looksLikePicapPopup(content)) {
+                picapWindow = window
+                nodesContent = content
+                root.recycle()
+                break
+            }
+            root.recycle()
+        }
+
+        if (picapWindow == null || nodesContent == null) return
 
         Log.d(TAG, "POSSIBLE PICAP POPUP detected from package: ${event.packageName}")
 
@@ -182,11 +192,7 @@ class MyAccessibilityService : AccessibilityService() {
     }
 
     private fun handlePicapEvent(event: AccessibilityEvent) {
-        // Find Picap window specifically, not just the active window
-        val picapWindow = windows.find { 
-            it.root?.packageName?.toString() == "co.picap.passenger" 
-        }
-        val rootNode = picapWindow?.root ?: return
+        val rootNode = rootInActiveWindow ?: return
 
         // --- MODO AUTO-CLIC EN LISTA ---
         if (OrderStateManager.isAutoClickEnabled.value) {
