@@ -182,7 +182,11 @@ class MyAccessibilityService : AccessibilityService() {
     }
 
     private fun handlePicapEvent(event: AccessibilityEvent) {
-        val rootNode = rootInActiveWindow ?: return
+        // Find Picap window specifically, not just the active window
+        val picapWindow = windows.find { 
+            it.root?.packageName?.toString() == "co.picap.passenger" 
+        }
+        val rootNode = picapWindow?.root ?: return
 
         // --- MODO AUTO-CLIC EN LISTA ---
         if (OrderStateManager.isAutoClickEnabled.value) {
