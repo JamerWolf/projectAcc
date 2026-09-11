@@ -140,22 +140,6 @@ class MyAccessibilityService : AccessibilityService() {
         // Parse as Picap order
         val order = parseOrder(nodesContent)
 
-        // Auto-accept if enabled
-        if (OrderStateManager.isPicapAutoAcceptEnabled.value && order.id.isNotEmpty() && shouldAutoAccept(order)) {
-            val now = System.currentTimeMillis()
-            if (now - lastClickTime >= CLICK_COOLDOWN_MS) {
-                Log.d(TAG, "AUTO-ACCEPT (popup): Orden califica para auto-acept. Buscando botón...")
-                val rootForClick = rootInActiveWindow
-                if (rootForClick != null && findAndClickAcceptButton(rootForClick)) {
-                    lastClickTime = System.currentTimeMillis()
-                    Log.i(TAG, "AUTO-ACCEPT (popup): Orden auto-aceptada!")
-                    rootForClick.recycle()
-                    return
-                }
-                rootForClick?.recycle()
-            }
-        }
-
         // Update UI if it's a new order
         if (order.id.isNotEmpty() && order.id != lastOrder?.id) {
             lastOrder = order
