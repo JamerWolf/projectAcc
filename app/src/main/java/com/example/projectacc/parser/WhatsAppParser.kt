@@ -14,7 +14,7 @@ object WhatsAppParser {
     private val valorFieldRegex = Regex("Valor:\\s*(.+)")
     private val pagoRegex = Regex("Pago:\\s*(.+)")
     private val valorRegex = Regex("El valor a cobrar es:\\s*(\\d+)")
-    private val requisitosRegex = Regex("Requisitos:\\s*(.+)")
+    private val requisitosRegex = Regex("Requisitos:\\s*(.+?)(?=\\n\\s*\\n|\\n👉|\\Z)", RegexOption.DOT_MATCHES_ALL)
 
     fun parse(text: String): WhatsAppService? {
         // Strip WhatsApp bold formatting (*) and clean text
