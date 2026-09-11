@@ -115,9 +115,7 @@ class MyAccessibilityService : AccessibilityService() {
         }
 
         // === UNKNOWN PACKAGE: Check if it's a Picap popup from notification ===
-        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
-            handlePossiblePicapPopup(event)
-        }
+        handlePossiblePicapPopup(event)
     }
 
     /**
