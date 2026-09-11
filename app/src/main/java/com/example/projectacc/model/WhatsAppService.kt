@@ -31,8 +31,12 @@ data class WhatsAppService(
         val match = Regex("Medio de pago:\\s*([^.,]+)", RegexOption.IGNORE_CASE).find(requisitos) ?: return null
         val medioDePago = match.groupValues[1].trim()
 
-        val valor = extractValor() ?: return null
-        val formattedValor = formatNumber(valor)
+        // Extract "valor a cobrar" from requisitos (e.g. "El valor a cobrar es: 301512")
+        val cobrarMatch = Regex("valor a cobrar es:\\s*([\\d.]+)", RegexOption.IGNORE_CASE).find(requisitos)
+        val valorCobrar = cobrarMatch?.groupValues?.get(1)?.replace(".", "")?.toIntOrNull()
+            ?: extractValor()
+            ?: return null
+        val formattedValor = formatNumber(valorCobrar)
 
         return "$medioDePago $formattedValor"
     }
