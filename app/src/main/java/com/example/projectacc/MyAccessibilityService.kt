@@ -113,6 +113,90 @@ class MyAccessibilityService : AccessibilityService() {
             handleWhatsAppEvent(event)
             return
         }
+
+        // === UNKNOWN PACKAGE: Check if it's a Picap popup from notification ===
+        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            handlePossiblePicapPopup(event)
+        }
+    }
+
+    /**
+     * Handles windows from unknown packages that might be Picap popups
+     * triggered by notification clicks when user is outside Picap.
+     */
+    private fun handlePossiblePicapPopup(event: AccessibilityEvent) {
+        val rootNode = rootInActiveWindow ?: return
+
+        // Extract all text content
+        val nodesContent = mutableListOf<String>()
+        flattenContentDescriptions(rootNode, nodesContent)
+        rootNode.recycle()
+
+        // Check if this window matches Picap format
+        if (!looksLikePicapPopup(nodesContent)) return
+
+        Log.d(TAG, "POSSIBLE PICAP POPUP detected from package: ${event.packageName}")
+
+        // Parse as Picap order
+        val order = parseOrder(nodesContent)
+
+        // Auto-accept if enabled
+        if (OrderStateManager.isPicapAutoAcceptEnabled.value && order.id.isNotEmpty() && shouldAutoAccept(order)) {
+            val now = System.currentTimeMillis()
+            if (now - lastClickTime >= CLICK_COOLDOWN_MS) {
+                Log.d(TAG, "AUTO-ACCEPT (popup): Orden califica para auto-acept. Buscando botón...")
+                val rootForClick = rootInActiveWindow
+                if (rootForClick != null && findAndClickAcceptButton(rootForClick)) {
+                    lastClickTime = System.currentTimeMillis()
+                    Log.i(TAG, "AUTO-ACCEPT (popup): Orden auto-aceptada!")
+                    rootForClick.recycle()
+                    return
+                }
+                rootForClick?.recycle()
+            }
+        }
+
+        // Update UI if it's a new order
+        if (order.id.isNotEmpty() && order.id != lastOrder?.id) {
+            lastOrder = order
+            OrderStateManager.setOrder(order)
+
+            val summary = """
+                
+                ORDEN CAPTURADA (popup) [#${order.id}]:
+                Ganancia: ${order.ganancia}
+                Recogida: ${order.direccionRecogida} (${order.tiempoRecogida})
+                Entrega:  ${order.direccionEntrega} (${order.tiempoEntrega})
+            """.trimIndent()
+            Log.i(TAG, summary)
+        }
+    }
+
+    /**
+     * Checks if a list of content descriptions looks like a Picap popup.
+     * Looks for key patterns: ID, ganancia, time/distance indicators.
+     */
+    private fun looksLikePicapPopup(content: List<String>): Boolean {
+        val fullText = content.joinToString(" ")
+
+        // Must have an ID
+        val hasId = content.any { it.startsWith("ID: ") || Regex("ID:\\s*[a-f0-9]+", RegexOption.IGNORE_CASE).containsMatchIn(it) }
+
+        // Must have ganancia
+        val hasGanancia = content.any { it == "Tu ganancia final" || Regex("\\$[\\d.,]+").containsMatchIn(it) }
+
+        // Must have at least one time indicator
+        val hasTimeIndicator = content.any {
+            (it.startsWith("A ") && it.contains("min")) ||
+            (it.contains("min (") && it.contains("km"))
+        }
+
+        // Must have a button that looks like "Aceptar"
+        val hasAcceptButton = content.any {
+            it.lowercase().contains("aceptar") || it.lowercase().contains("accept")
+        }
+
+        return hasId && hasGanancia && hasTimeIndicator && hasAcceptButton
     }
 
     private fun handlePicapEvent(event: AccessibilityEvent) {
