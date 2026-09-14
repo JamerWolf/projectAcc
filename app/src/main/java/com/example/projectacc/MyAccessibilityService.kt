@@ -6,6 +6,9 @@ import android.content.Context
 import android.os.Bundle
 import android.view.accessibility.AccessibilityEvent
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.AccessibilityServiceInfo
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.accessibility.AccessibilityNodeInfo
 import com.example.projectacc.floating.FloatingPopupManager
@@ -17,6 +20,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.log
 
 /**
  * Modelo de datos para representar una orden de Picap capturada.
@@ -37,6 +41,10 @@ class MyAccessibilityService : AccessibilityService() {
     companion object {
         var instance: MyAccessibilityService? = null
             private set
+
+        const val PACKAGE_PICAP = "co.picap.passenger"
+        const val PACKAGE_WHATSAPP = "com.whatsapp"
+        const val PACKAGE_WHATSAPP_BIZ = "com.whatsapp.w4b"
     }
 
     private var floatingPopup: FloatingPopupManager? = null
@@ -58,7 +66,10 @@ class MyAccessibilityService : AccessibilityService() {
             if (inputNode != null) {
                 inputNode.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
                 val pasteBundle = Bundle().apply {
-                    putBoolean("android.view.accessibility.accessibilityNodeInfo.actionArguments.pasteKey", true)
+                    putBoolean(
+                        "android.view.accessibility.accessibilityNodeInfo.actionArguments.pasteKey",
+                        true
+                    )
                 }
                 inputNode.performAction(AccessibilityNodeInfo.ACTION_PASTE, pasteBundle)
                 Log.d(TAG, "WHATSAPP: Texto pegado (sin enviar): $text")
@@ -84,6 +95,20 @@ class MyAccessibilityService : AccessibilityService() {
     private var lastClickTime: Long = 0L
     private val CLICK_COOLDOWN_MS = 2000L
 
+    override fun onServiceConnected() {
+        super.onServiceConnected()
+
+        val info = serviceInfo
+
+        info.flags = info.flags or
+                AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+
+        serviceInfo = info
+
+        Log.d(TAG, "AccessibilityService conectado")
+        Log.d(TAG, "flags = ${serviceInfo.flags}")
+    }
+
     override fun onCreate() {
         super.onCreate()
         instance = this
@@ -103,20 +128,35 @@ class MyAccessibilityService : AccessibilityService() {
         val packageName = event.packageName?.toString() ?: return
 
         // === PICAP HANDLING ===
-        if (packageName == "co.picap.passenger") {
+        if (packageName == PACKAGE_PICAP) {
             handlePicapEvent(event)
-            handlePossiblePicapPopup(event)
             return
         }
 
         // === WHATSAPP HANDLING ===
-        if (packageName == "com.whatsapp" || packageName == "com.whatsapp.w4b") {
+        if (packageName == PACKAGE_WHATSAPP || packageName == PACKAGE_WHATSAPP_BIZ) {
             handleWhatsAppEvent(event)
             return
         }
+    }
 
-        // === UNKNOWN PACKAGE: Check if it's a Picap popup from notification ===
+    /**
+     * Busca entre todas las ventanas la que coincida con el packageName dado
+     * y retorna su rootNode. Retorna null si no se encuentra.
+     */
+    private fun findWindowRoot(packageName: String): AccessibilityNodeInfo? {
+        return windows.firstOrNull {
+            it.root?.packageName == packageName
+        }?.root
+    }
 
+    /**
+     * Retorna todas las ventanas que coincidan con el packageName dado.
+     */
+    private fun findAllWindows(packageName: String): List<AccessibilityNodeInfo> {
+        return windows.mapNotNull { window ->
+            window.root?.takeIf { it.packageName == packageName }
+        }
     }
 
     /**
@@ -124,95 +164,55 @@ class MyAccessibilityService : AccessibilityService() {
      * triggered by notification clicks when user is outside Picap.
      */
     private fun handlePossiblePicapPopup(event: AccessibilityEvent) {
-        Log.d(TAG, "handlePossiblePicapPopup")
-        // Delay to allow Picap window to become active after notification click
-        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-            val rootNode = rootInActiveWindow ?: return@postDelayed
 
-            // Extract all text content
-            val nodesContent = mutableListOf<String>()
-            flattenContentDescriptions(rootNode, nodesContent)
-            rootNode.recycle()
-
-            // Check if this window matches Picap format
-            if (!looksLikePicapPopup(nodesContent)) return@postDelayed
-
-            Log.d(TAG, "POSSIBLE PICAP POPUP detected from package: ${event.packageName}")
-
-            // Parse as Picap order
-            val order = parseOrder(nodesContent)
-
-            // Update UI if it's a new order
-            if (order.id.isNotEmpty() && order.id != lastOrder?.id) {
-                lastOrder = order
-                OrderStateManager.setOrder(order)
-
-                val summary = """
-                    
-                    ORDEN CAPTURADA (popup) [#${order.id}]:
-                    Ganancia: ${order.ganancia}
-                    Recogida: ${order.direccionRecogida} (${order.tiempoRecogida})
-                    Entrega:  ${order.direccionEntrega} (${order.tiempoEntrega})
-                """.trimIndent()
-                Log.i(TAG, summary)
-            }
-        }, 1000L)
-    }
-
-    /**
-     * Checks if a list of content descriptions looks like a Picap popup.
-     * Looks for key patterns: ID, ganancia, time/distance indicators.
-     */
-    private fun looksLikePicapPopup(content: List<String>): Boolean {
-        val fullText = content.joinToString(" ")
-
-        // Must have an ID
-        val hasId = content.any { it.startsWith("ID: ") || Regex("ID:\\s*[a-f0-9]+", RegexOption.IGNORE_CASE).containsMatchIn(it) }
-
-        // Must have ganancia
-        val hasGanancia = content.any { it == "Tu ganancia final" || Regex("\\$[\\d.,]+").containsMatchIn(it) }
-
-        // Must have at least one time indicator
-        val hasTimeIndicator = content.any {
-            (it.startsWith("A ") && it.contains("min")) ||
-            (it.contains("min (") && it.contains("km"))
-        }
-
-        // Must have a button that looks like "Aceptar"
-        val hasAcceptButton = content.any {
-            it.lowercase().contains("aceptar") || it.lowercase().contains("accept")
-        }
-
-        return hasId && hasGanancia && hasTimeIndicator && hasAcceptButton
     }
 
     private fun handlePicapEvent(event: AccessibilityEvent) {
-        val rootNode = rootInActiveWindow ?: return
+        val picapWindows = findAllWindows(PACKAGE_PICAP)
+        if (picapWindows.isEmpty()) return
 
         // --- MODO AUTO-CLIC EN LISTA ---
         if (OrderStateManager.isAutoClickEnabled.value) {
-            if (findAndClickEstimatedPrice(rootNode)) {
-                Log.d(TAG, "AUTOCLICK: Orden capturada!")
-                hasScannedInitially = false
-                rootNode.recycle()
+            for (rootNode in picapWindows) {
+                if (findAndClickEstimatedPrice(rootNode)) {
+                    Log.d(TAG, "AUTOCLICK: Orden capturada!")
+                    hasScannedInitially = false
+                    picapWindows.forEach { it.recycle() }
+                    return
+                }
+            }
+        }
+
+        // Buscar orden válida en alguna de las ventanas
+        for (rootNode in picapWindows) {
+            val currentPercentage = findPercentage(rootNode)
+
+            // Lógica de filtrado por porcentaje:
+            if (currentPercentage != null) {
+                if (currentPercentage < lastPercentage) {
+                    lastPercentage = currentPercentage
+                    rootNode.recycle()
+                    continue
+                }
+                lastPercentage = currentPercentage
+            } else {
+                lastPercentage = -1
+            }
+
+            // Procesar ventana y verificar si tiene orden válida
+            if (processPicapWindow(rootNode)) {
+                picapWindows.forEach { it.recycle() }
                 return
             }
+            rootNode.recycle()
         }
-        
-        val currentPercentage = findPercentage(rootNode)
+    }
 
-        // Lógica de filtrado por porcentaje:
-        if (currentPercentage != null) {
-            if (currentPercentage < lastPercentage) {
-                lastPercentage = currentPercentage
-                rootNode.recycle()
-                return 
-            }
-            lastPercentage = currentPercentage
-        } else {
-            lastPercentage = -1
-        }
-
+    /**
+     * Procesa una ventana de Picap: genera log, extrae orden, y evalúa auto-accept.
+     * Retorna true si se procesó una orden válida.
+     */
+    private fun processPicapWindow(rootNode: AccessibilityNodeInfo): Boolean {
         // 1. GENERAR EL LOG VISUAL DEL ÁRBOL
         val treeBuilder = StringBuilder()
         treeBuilder.append("\n╔════════════ ARBOL DE NODOS (PICAP) ════════════╗\n")
@@ -225,16 +225,18 @@ class MyAccessibilityService : AccessibilityService() {
         flattenContentDescriptions(rootNode, nodesContent)
         val order = parseOrder(nodesContent)
 
+        // Si no hay ID, no es una orden válida
+        if (order.id.isEmpty()) return false
+
         // --- AUTO-ACCEPT: Evaluar siempre que haya ID, sin importar si es la misma orden ---
-        if (OrderStateManager.isPicapAutoAcceptEnabled.value && order.id.isNotEmpty() && shouldAutoAccept(order)) {
+        if (OrderStateManager.isPicapAutoAcceptEnabled.value && shouldAutoAccept(order)) {
             val now = System.currentTimeMillis()
             if (now - lastClickTime >= CLICK_COOLDOWN_MS) {
                 Log.d(TAG, "AUTO-ACCEPT: Orden califica para auto-acept. Buscando botón...")
                 if (findAndClickAcceptButton(rootNode)) {
                     lastClickTime = System.currentTimeMillis()
                     Log.i(TAG, "AUTO-ACCEPT: Orden auto-aceptada! No se mostrara en UI.")
-                    rootNode.recycle()
-                    return
+                    return true
                 }
             } else {
                 Log.d(TAG, "AUTO-ACCEPT: En cooldown, esperando...")
@@ -242,7 +244,7 @@ class MyAccessibilityService : AccessibilityService() {
         }
 
         // Actualizar UI solo si es una orden nueva basada en el ID
-        if (order.id.isNotEmpty() && order.id != lastOrder?.id) {
+        if (order.id != lastOrder?.id) {
             lastOrder = order
             OrderStateManager.setOrder(order)
 
@@ -254,9 +256,10 @@ class MyAccessibilityService : AccessibilityService() {
                 Entrega:  ${order.direccionEntrega} (${order.tiempoEntrega})
             """.trimIndent()
             Log.i(TAG, summary)
+            return true
         }
 
-        rootNode.recycle()
+        return false
     }
 
     private fun handleWhatsAppEvent(event: AccessibilityEvent) {
@@ -273,7 +276,8 @@ class MyAccessibilityService : AccessibilityService() {
     }
 
     // Patterns that indicate this is a RESPONSE message (not a service offer)
-    private val responsePatterns = listOf("genial", "asignarte", "envíame la placa", "enviame la placa")
+    private val responsePatterns =
+        listOf("genial", "asignarte", "envíame la placa", "enviame la placa")
 
     /**
      * Extracts the last message block from the full text.
@@ -353,8 +357,8 @@ class MyAccessibilityService : AccessibilityService() {
 
         // Check if service meets auto-accept conditions
         val meetsConditions = valor >= minGanancia1 ||
-            (kmRecogida != null && kmRecogida <= maxKmCond2 && valor >= minGanancia2) ||
-            (isKmEnabled && kmRecogida != null && (maxKm >= 5.0 || kmRecogida <= maxKm))
+                (kmRecogida != null && kmRecogida <= maxKmCond2 && valor >= minGanancia2) ||
+                (isKmEnabled && kmRecogida != null && (maxKm >= 5.0 || kmRecogida <= maxKm))
 
         // Auto-respond if enabled AND conditions are met
         if (autoRespondEnabled && meetsConditions) {
@@ -363,7 +367,10 @@ class MyAccessibilityService : AccessibilityService() {
             val effectiveDelay = if (delayEnabled) delayMs else 0L
             val detectedAt = System.currentTimeMillis()
 
-            Log.d(TAG, "WHATSAPP: Auto-aceptar: valor $valor, km $kmRecogida, delay ${effectiveDelay}ms")
+            Log.d(
+                TAG,
+                "WHATSAPP: Auto-aceptar: valor $valor, km $kmRecogida, delay ${effectiveDelay}ms"
+            )
             if (effectiveDelay > 0) {
                 android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                     pasteAndSend("Me interesa ${service.id}", detectedAt)
@@ -437,7 +444,10 @@ class MyAccessibilityService : AccessibilityService() {
             if (inputNode != null) {
                 inputNode.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
                 val pasteBundle = Bundle().apply {
-                    putBoolean("android.view.accessibility.accessibilityNodeInfo.actionArguments.pasteKey", true)
+                    putBoolean(
+                        "android.view.accessibility.accessibilityNodeInfo.actionArguments.pasteKey",
+                        true
+                    )
                 }
                 inputNode.performAction(AccessibilityNodeInfo.ACTION_PASTE, pasteBundle)
                 Log.d(TAG, "WHATSAPP: Texto pegado: $text")
@@ -454,7 +464,8 @@ class MyAccessibilityService : AccessibilityService() {
                         val sendBtn = findSendButton(root)
                         if (sendBtn != null) {
                             sendBtn.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                            val elapsed = if (notificationTimestamp > 0) System.currentTimeMillis() - notificationTimestamp else 0L
+                            val elapsed =
+                                if (notificationTimestamp > 0) System.currentTimeMillis() - notificationTimestamp else 0L
                             Log.d(TAG, "WHATSAPP: Mensaje enviado (intento #$attempts): $text")
                             if (notificationTimestamp > 0) {
                                 Log.i(TAG, "WHATSAPP: ⏱️ Tiempo notificación → envío: ${elapsed}ms")
@@ -464,10 +475,16 @@ class MyAccessibilityService : AccessibilityService() {
                         } else {
                             root.recycle()
                             if (attempts < maxAttempts) {
-                                Log.d(TAG, "WHATSAPP: Boton de envio no encontrado, reintento #$attempts")
+                                Log.d(
+                                    TAG,
+                                    "WHATSAPP: Boton de envio no encontrado, reintento #$attempts"
+                                )
                                 handler.postDelayed(this, 300)
                             } else {
-                                Log.w(TAG, "WHATSAPP: Boton de envio no encontrado despues de $maxAttempts intentos")
+                                Log.w(
+                                    TAG,
+                                    "WHATSAPP: Boton de envio no encontrado despues de $maxAttempts intentos"
+                                )
                             }
                         }
                     }
@@ -520,8 +537,14 @@ class MyAccessibilityService : AccessibilityService() {
 
         if (!isForwardButton) {
             // Check for send button by content description, text, or resource ID
-            if (cd.contains("Enviar", ignoreCase = true) || cd.contains("Send", ignoreCase = true) ||
-                text.contains("Enviar", ignoreCase = true) || text.contains("Send", ignoreCase = true) ||
+            if (cd.contains("Enviar", ignoreCase = true) || cd.contains(
+                    "Send",
+                    ignoreCase = true
+                ) ||
+                text.contains("Enviar", ignoreCase = true) || text.contains(
+                    "Send",
+                    ignoreCase = true
+                ) ||
                 id.contains("send", ignoreCase = true) ||
                 id.contains("com.whatsapp:id/send", ignoreCase = true)
             ) {
@@ -572,7 +595,7 @@ class MyAccessibilityService : AccessibilityService() {
             // Extraer el ID de este servicio
             val idMatch = Regex("ID: ([a-f0-9]+)", RegexOption.IGNORE_CASE).find(cd)
             val serviceId = idMatch?.groupValues?.get(1) ?: ""
-            
+
             // --- VERIFICAR MEMORIA ANTES DE HACER CLIC ---
             val scannedIds = OrderStateManager.scannedServiceIds.value
             if (serviceId.isNotEmpty() && scannedIds.contains(serviceId)) {
@@ -581,7 +604,7 @@ class MyAccessibilityService : AccessibilityService() {
             } else {
                 // ID nuevo o no se pudo extraer: hacer clic
                 Log.d(TAG, "AUTOCLICK: Orden nueva detectada (ID: $serviceId). Intentando clic...")
-                
+
                 if (node.isClickable) {
                     val result = node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
                     if (result) {
@@ -593,7 +616,7 @@ class MyAccessibilityService : AccessibilityService() {
                         return true
                     }
                 }
-                
+
                 // Intentar con el padre
                 val parent = node.parent
                 if (parent != null) {
@@ -627,7 +650,10 @@ class MyAccessibilityService : AccessibilityService() {
     /**
      * Aplana el árbol en una lista de Content Descriptions para facilitar la búsqueda por posición.
      */
-    private fun flattenContentDescriptions(node: AccessibilityNodeInfo?, list: MutableList<String>) {
+    private fun flattenContentDescriptions(
+        node: AccessibilityNodeInfo?,
+        list: MutableList<String>
+    ) {
         if (node == null) return
         val cd = node.contentDescription?.toString() ?: ""
         if (cd.isNotEmpty()) list.add(cd)
@@ -651,17 +677,17 @@ class MyAccessibilityService : AccessibilityService() {
 
         for (i in texts.indices) {
             val current = texts[i]
-            
+
             // Extraer ID (formato "ID: 12345")
             if (current.startsWith("ID: ")) {
                 id = current.replace("ID: ", "").trim()
             }
-            
+
             // Ganancia: el valor está después de "Tu ganancia final"
             if (current == "Tu ganancia final" && i + 1 < texts.size) {
                 ganancia = texts[i + 1]
             }
-            
+
             // Recogida: Detecta "A X mins..."
             if (current.startsWith("A ") && current.contains("min") && i + 1 < texts.size) {
                 tiempoRec = current
@@ -695,7 +721,7 @@ class MyAccessibilityService : AccessibilityService() {
      */
     private fun extractAllServiceIds(node: AccessibilityNodeInfo?, ids: MutableSet<String>) {
         if (node == null) return
-        
+
         val cd = node.contentDescription?.toString() ?: ""
         if (cd.contains("Precio estimado")) {
             // Buscar el patrón "ID: XXXXX" en el contentDescription
@@ -706,7 +732,7 @@ class MyAccessibilityService : AccessibilityService() {
                 Log.d(TAG, "MEMORY: Guardando ID de lista: $id")
             }
         }
-        
+
         // Continuar buscando en hijos
         for (i in 0 until node.childCount) {
             val child = node.getChild(i)
@@ -746,7 +772,7 @@ class MyAccessibilityService : AccessibilityService() {
         val id = node.viewIdResourceName?.split("/")?.last() ?: "no-id"
         val text = node.text?.toString()?.replace("\n", " ") ?: ""
         val contentDesc = node.contentDescription?.toString()?.replace("\n", " ") ?: ""
-        
+
         sb.append("${indent}╠═ [$className] ID: $id | Text: \"$text\" | CD: \"$contentDesc\"\n")
 
         for (i in 0 until node.childCount) {
@@ -794,25 +820,37 @@ class MyAccessibilityService : AccessibilityService() {
 
         // CONDICIÓN 1: Ganancia >= umbral 1 → ACEPTAR SIEMPRE
         if (gananciaNum >= minGanancia1) {
-            Log.d(TAG, "AUTO-ACCEPT: Condición 1 - Ganancia $gananciaNum >= $minGanancia1. Aceptando.")
+            Log.d(
+                TAG,
+                "AUTO-ACCEPT: Condición 1 - Ganancia $gananciaNum >= $minGanancia1. Aceptando."
+            )
             return true
         }
 
         // CONDICIÓN 2: Ganancia >= umbral 2 Y km <= km máximo condición 2 → ACEPTAR
         if (gananciaNum >= minGanancia2 && kmRecogida <= maxKmCond2) {
-            Log.d(TAG, "AUTO-ACCEPT: Condición 2 - Ganancia $gananciaNum >= $minGanancia2 Y km $kmRecogida <= $maxKmCond2. Aceptando.")
+            Log.d(
+                TAG,
+                "AUTO-ACCEPT: Condición 2 - Ganancia $gananciaNum >= $minGanancia2 Y km $kmRecogida <= $maxKmCond2. Aceptando."
+            )
             return true
         }
 
         // CONDICIÓN 3: km <= umbral seleccionado → ACEPTAR (solo si el switch está activo)
         if (OrderStateManager.isAutoAcceptByKmEnabled.value) {
             if (autoAcceptKm >= 5.0 || kmRecogida <= autoAcceptKm) {
-                Log.d(TAG, "AUTO-ACCEPT: Condición 3 - umbral al máximo o km $kmRecogida <= umbral $autoAcceptKm. Aceptando.")
+                Log.d(
+                    TAG,
+                    "AUTO-ACCEPT: Condición 3 - umbral al máximo o km $kmRecogida <= umbral $autoAcceptKm. Aceptando."
+                )
                 return true
             }
         }
 
-        Log.d(TAG, "AUTO-ACCEPT: No cumple ninguna condición (Ganancia: $gananciaNum, Km: $kmRecogida, Umbral: $autoAcceptKm)")
+        Log.d(
+            TAG,
+            "AUTO-ACCEPT: No cumple ninguna condición (Ganancia: $gananciaNum, Km: $kmRecogida, Umbral: $autoAcceptKm)"
+        )
         return false
     }
 
@@ -829,8 +867,8 @@ class MyAccessibilityService : AccessibilityService() {
 
         // Buscar botones que contengan "Aceptar" en texto o contentDescription
         val isAcceptButton = (className.contains("Button") || className.contains("TextView")) &&
-                (text.contains("Aceptar", ignoreCase = true) || 
-                 contentDesc.contains("Aceptar", ignoreCase = true))
+                (text.contains("Aceptar", ignoreCase = true) ||
+                        contentDesc.contains("Aceptar", ignoreCase = true))
 
         if (isAcceptButton) {
             Log.d(TAG, "AUTO-ACCEPT: Botón 'Aceptar' encontrado. Intentando clic...")
