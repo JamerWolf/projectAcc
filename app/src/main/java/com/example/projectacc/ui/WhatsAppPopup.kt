@@ -71,23 +71,41 @@ fun WhatsAppPopup(
                 if (service.destino.isNotEmpty()) {
                     DetailRow(label = "Destino", value = service.destino)
                 }
-                if (service.pago.isNotEmpty()) {
-                    DetailRow(label = "Pago", value = service.pago)
-                }
-                if (service.valorCobrar.isNotEmpty()) {
-                    DetailRow(label = "Valor a cobrar", value = service.valorCobrar)
-                }
-                if (service.requisitos.isNotEmpty()) {
-                    DetailRow(label = "Requisitos", value = service.requisitos)
-                }
-                if (service.medioDePagoFormatted() != null) {
-                    Spacer(modifier = Modifier.height(4.dp))
+
+                // Show pilot's payment prominently
+                if (service.pagoPiloto() != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = service.medioDePagoFormatted()!!,
-                        style = MaterialTheme.typography.bodyMedium,
+                        text = "Pago al piloto: ${service.pagoPiloto()!!}",
+                        style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFFFFC107)
                     )
+                }
+
+                // Show payment method
+                if (service.metodoPago() != null) {
+                    DetailRow(label = "Forma de pago", value = service.metodoPago()!!)
+                }
+
+                // Show cobros for Ruta format
+                if (service.cobrosFormatted().isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Valores a cobrar:",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    service.cobrosFormatted().forEach { cobro ->
+                        Text(
+                            text = cobro,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFFFC107)
+                        )
+                    }
+                } else if (service.requisitos.isNotEmpty()) {
+                    DetailRow(label = "Requisitos", value = service.requisitos)
                 }
             }
         },

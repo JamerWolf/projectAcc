@@ -1,15 +1,16 @@
 package com.example.projectacc.parser
 
+import com.example.projectacc.model.Cobro
 import com.example.projectacc.model.WhatsAppService
 
 object WhatsAppParser {
 
-    private val serviceIdRegex = Regex("🏷️\\s*Servicio\\s+(\\d+)")
+    private val serviceIdRegex = Regex("🏷️\\s*(?:Servicio|Ruta)\\s+(\\d+)")
     private val lastLineIdRegex = Regex("Me interesa\\s+(\\d+)")
     private val empresaRegex = Regex("(?:Nuevo servicio de|disponible en|servicio programado disponible en)\\s+(.+?)\\.\\s*$", RegexOption.MULTILINE)
-    private val servicioTypeRegex = Regex("Servicio\\s+\\d+\\s*[—–-]\\s*(.+)")
+    private val servicioTypeRegex = Regex("(?:Servicio|Ruta)\\s+\\d+\\s*[—–-]\\s*(.+)")
     private val ciudadRegex = Regex("🏙️\\s*Ciudad:\\s*(.+)")
-    private val origenRegex = Regex("📍\\s*Origen:\\s*(.+)")
+    private val origenRegex = Regex("📍\\s*(?:Origen|Recogida):\\s*(.+)")
     private val destinoRegex = Regex("🏁\\s*Destino:\\s*(.+)")
     private val valorFieldRegex = Regex("Valor:\\s*(.+)")
     private val pagoRegex = Regex("Pago:\\s*(.+)")
@@ -32,6 +33,7 @@ object WhatsAppParser {
         // Find the start of the LAST message block
         // Look for the last "⚡" or "Nuevo servicio" before the last service ID
         val lastIdIndex = cleanText.lastIndexOf("Servicio $id")
+            .coerceAtLeast(cleanText.lastIndexOf("Ruta $id"))
             .coerceAtLeast(cleanText.lastIndexOf("Me interesa $id"))
 
         // Search backwards from the last ID to find the message start
@@ -52,6 +54,8 @@ object WhatsAppParser {
 
         if (id.isEmpty()) return null
 
+        val formasDePago = parseCobros(requisitos)
+
         return WhatsAppService(
             id = id,
             servicio = servicio,
@@ -62,7 +66,8 @@ object WhatsAppParser {
             valor = valor,
             pago = pago,
             valorCobrar = valorCobrar,
-            requisitos = requisitos
+            requisitos = requisitos,
+            formasDePago = formasDePago
         )
     }
 
@@ -82,5 +87,30 @@ object WhatsAppParser {
 
         val markers = listOf(lastLightning, lastNuevoServicio, lastRuta, lastProgramado).filter { it >= 0 }
         return if (markers.isNotEmpty()) markers.max() else 0
+    }
+
+    private fun parseCobros(requisitos: String): List<Cobro> {
+        if (requisitos.isBlank()) return emptyList()
+
+        val cobros = mutableListOf<Cobro>()
+        val parts = requisitos.split(";")
+
+        val cobroValorRegex = Regex("valor a cobrar es:\\s*([\\d.]+)", RegexOption.IGNORE_CASE)
+        val cobroMedioRegex = Regex("medio de pago:\\s*(.+)", RegexOption.IGNORE_CASE)
+
+        for (part in parts) {
+            val trimmed = part.trim()
+            if (trimmed.isBlank()) continue
+
+            val valorMatch = cobroValorRegex.find(trimmed) ?: continue
+            val valor = valorMatch.groupValues[1].replace(".", "").toIntOrNull() ?: continue
+
+            val medioMatch = cobroMedioRegex.find(trimmed)
+            val medioDePago = medioMatch?.groupValues?.get(1)?.trim() ?: ""
+
+            cobros.add(Cobro(valor = valor, medioDePago = medioDePago))
+        }
+
+        return cobros
     }
 }

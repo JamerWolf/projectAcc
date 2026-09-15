@@ -101,7 +101,11 @@ class MyAccessibilityService : AccessibilityService() {
         val info = serviceInfo
 
         info.flags = info.flags or
-                AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+                AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
+                AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS or
+                AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
+                0x10000000 or // FLAG_REQUEST_OVERLAY_WINDOWS (API 22+)
+                AccessibilityServiceInfo.CAPABILITY_CAN_RETRIEVE_WINDOW_CONTENT
 
         serviceInfo = info
 
@@ -124,6 +128,41 @@ class MyAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        val type = when (event?.eventType) {
+            1 -> "VIEW_CLICKED"
+            2 -> "VIEW_LONG_CLICKED"
+            4 -> "VIEW_SELECTED"
+            8 -> "VIEW_FOCUSED"
+            16 -> "VIEW_TEXT_CHANGED"
+            32 -> "WINDOW_STATE_CHANGED"
+            64 -> "NOTIFICATION_STATE_CHANGED"
+            128 -> "VIEW_HOVER_ENTER"
+            256 -> "VIEW_HOVER_EXIT"
+            512 -> "TOUCH_EXPLORATION_GESTURE_START"
+            1024 -> "TOUCH_EXPLORATION_GESTURE_END"
+            2048 -> "WINDOW_CONTENT_CHANGED"
+            4096 -> "VIEW_TEXT_SELECTION_CHANGED"
+            8192 -> "VIEW_SCROLLED"
+            16384 -> "VIEW_TEXT_TRAVERSED_AT_MOVEMENT_GRANULARITY"
+            32768 -> "GESTURE_DETECTION_START"
+            65536 -> "GESTURE_DETECTION_END"
+            131072 -> "TOUCH_INTERACTION_START"
+            262144 -> "TOUCH_INTERACTION_END"
+            524288 -> "WINDOWS_CHANGED"
+            1048576 -> "VIEW_CONTEXT_CLICKED"
+            2097152 -> "ASSIST_READING_CONTEXT"
+            else -> "TYPE_${event?.eventType}"
+        }
+        Log.d(
+            "EVENT_DEBUG",
+            "TYPE=${type} " +
+                    "PACKAGE=${event?.packageName} " +
+                    "CLASS=${event?.className} " +
+                    "TEXT=${event?.text}"
+        )
+
+        logWindows()
+
         if (event == null) return
         val packageName = event.packageName?.toString() ?: return
 
@@ -140,6 +179,46 @@ class MyAccessibilityService : AccessibilityService() {
         }
     }
 
+    private fun logWindows() {
+        Log.d("DEBUG_WINDOWS", "==========WINDOWS (${windows.size})=============")
+        windows.forEach { window ->
+            try {
+                val type = when (window.type) {
+                    1 -> "APPLICATION"
+                    2 -> "INPUT_METHOD"
+                    3 -> "SYSTEM"
+                    4 -> "ACCESSIBILITY_OVERLAY"
+                    5 -> "SPLIT_SCREEN_DIVIDER"
+                    6 -> "MAGNIFICATION_OVERLAY"
+                    else -> "TYPE_${window.type}"
+                }
+
+                val root = window.root
+
+                val pkg = root?.packageName?.toString() ?: "ROOT_NULL"
+
+                Log.d(
+                    "DEBUG_WINDOWS",
+                    "Window: " +
+                            "id=${window.id} " +
+                            "type=$type(${window.type}) " +
+                            "pkg=$pkg " +
+                            "root=${root != null} " +
+                            "active=${window.isActive} " +
+                            "focused=${window.isFocused} " +
+                            "layer=${window.layer}"
+                )
+
+            } catch (e: Exception) {
+                Log.w(
+                    "DEBUG_WINDOWS",
+                    "Error procesando window: ${e.message}"
+                )
+            }
+        }
+        Log.d("DEBUG_WINDOWS", "===========================================")
+    }
+
     /**
      * Busca entre todas las ventanas la que coincida con el packageName dado
      * y retorna su rootNode. Retorna null si no se encuentra.
@@ -154,8 +233,18 @@ class MyAccessibilityService : AccessibilityService() {
      * Retorna todas las ventanas que coincidan con el packageName dado.
      */
     private fun findAllWindows(packageName: String): List<AccessibilityNodeInfo> {
-        return windows.mapNotNull { window ->
-            window.root?.takeIf { it.packageName == packageName }
+        return try {
+            windows.mapNotNull { window ->
+                try {
+                    window.root?.takeIf { it.packageName == packageName }
+                } catch (e: Exception) {
+                    Log.w(TAG, "findAllWindows: window root null o inaccesible: ${e.message}")
+                    null
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "findAllWindows: error accediendo windows: ${e.message}")
+            emptyList()
         }
     }
 
@@ -214,11 +303,7 @@ class MyAccessibilityService : AccessibilityService() {
      */
     private fun processPicapWindow(rootNode: AccessibilityNodeInfo): Boolean {
         // 1. GENERAR EL LOG VISUAL DEL ÁRBOL
-        val treeBuilder = StringBuilder()
-        treeBuilder.append("\n╔════════════ ARBOL DE NODOS (PICAP) ════════════╗\n")
-        generateTreeLog(rootNode, treeBuilder, 0)
-        treeBuilder.append("╚═════════════════════════════════════════════════╝")
-        Log.d(TAG, treeBuilder.toString())
+        logginTree(rootNode)
 
         // 2. EXTRAER DATOS PARA EL MODELO ORDER
         val nodesContent = mutableListOf<String>()
@@ -260,6 +345,14 @@ class MyAccessibilityService : AccessibilityService() {
         }
 
         return false
+    }
+
+    private fun logginTree(rootNode: AccessibilityNodeInfo, packageName: String = "PICAP") {
+        val treeBuilder = StringBuilder()
+        treeBuilder.append("\n╔════════════ ARBOL DE NODOS (${packageName}) ════════════╗\n")
+        generateTreeLog(rootNode, treeBuilder, 0)
+        treeBuilder.append("╚═════════════════════════════════════════════════╝")
+        Log.d(TAG, treeBuilder.toString())
     }
 
     private fun handleWhatsAppEvent(event: AccessibilityEvent) {

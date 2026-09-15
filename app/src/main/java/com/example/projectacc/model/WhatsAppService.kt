@@ -1,5 +1,10 @@
 package com.example.projectacc.model
 
+data class Cobro(
+    val valor: Int,
+    val medioDePago: String
+)
+
 data class WhatsAppService(
     val id: String = "",
     val servicio: String = "",
@@ -10,8 +15,35 @@ data class WhatsAppService(
     val valor: String = "",
     val pago: String = "",
     val valorCobrar: String = "",
-    val requisitos: String = ""
+    val requisitos: String = "",
+    val formasDePago: List<Cobro> = emptyList()
 ) {
+    /**
+     * Returns the pilot's payment amount.
+     * Servicio format: from "Valor: $22.000"
+     * Ruta format: from "Pago: $23.400"
+     */
+    fun pagoPiloto(): String? {
+        // Servicio format: "Valor: $22.000" contains a $ amount
+        if (valor.contains("$")) return valor
+        // Ruta format: "Pago: $23.400" contains a $ amount
+        if (pago.contains("$")) return pago
+        return null
+    }
+
+    /**
+     * Returns the payment method.
+     * Servicio format: from "Pago: Billetera"
+     * Ruta format: from "Forma de pago: Billetera" in requisitos
+     */
+    fun metodoPago(): String? {
+        // Servicio format: "Pago: Billetera" (no $ amount)
+        if (pago.isNotEmpty() && !pago.contains("$")) return pago
+        // Ruta format: "Forma de pago: Billetera" in requisitos
+        val formaMatch = Regex("Forma de pago:\\s*(.+)", RegexOption.IGNORE_CASE).find(requisitos)
+        return formaMatch?.groupValues?.get(1)?.trim()
+    }
+
     /**
      * Returns the "Valor" field formatted for display.
      * Example: "$7.480"
@@ -63,11 +95,22 @@ data class WhatsAppService(
         return formatted.toString()
     }
 
+    fun cobrosFormatted(): List<String> {
+        return formasDePago.map { cobro ->
+            "${cobro.medioDePago} $${formatNumber(cobro.valor)}"
+        }
+    }
+
     fun needsReturnIcon(): Boolean {
-        // Si el medio de pago es prepagado, NUNCA mostrar ícono de retorno
         val lowerPago = pago.lowercase()
         val lowerRequisitos = requisitos.lowercase()
-        if (lowerPago.contains("prepagado") || lowerRequisitos.contains("prepagado")) return false
+
+        if (formasDePago.isNotEmpty()) {
+            val allPrepaid = formasDePago.all { it.medioDePago.lowercase().contains("prepagado") }
+            if (allPrepaid) return false
+        } else {
+            if (lowerPago.contains("prepagado") || lowerRequisitos.contains("prepagado")) return false
+        }
 
         if (lowerRequisitos.contains("datafono") || lowerRequisitos.contains("datáfono")) return true
         if (lowerRequisitos.contains("cadena de frio") || lowerRequisitos.contains("cadena de frío")) return true

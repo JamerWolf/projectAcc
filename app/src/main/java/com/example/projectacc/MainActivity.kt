@@ -55,6 +55,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.projectacc.ui.PlateAutoSendScreen
 import com.example.projectacc.ui.SavedLocationsScreen
 import com.example.projectacc.ui.SettingsScreen
 import com.example.projectacc.ui.WhatsAppScreen
@@ -100,15 +101,20 @@ class MainActivity : ComponentActivity() {
             ProjectAccTheme {
                 var showSettings by remember { mutableStateOf(false) }
                 var showSavedLocations by remember { mutableStateOf(false) }
+                var showPlateAutoSend by remember { mutableStateOf(false) }
 
                 when {
+                    showPlateAutoSend -> {
+                        PlateAutoSendScreen(onBack = { showPlateAutoSend = false })
+                    }
                     showSavedLocations -> {
                         SavedLocationsScreen(onBack = { showSavedLocations = false })
                     }
                     showSettings -> {
                         SettingsScreen(
                             onBack = { showSettings = false },
-                            onOpenSavedLocations = { showSettings = false; showSavedLocations = true }
+                            onOpenSavedLocations = { showSettings = false; showSavedLocations = true },
+                            onOpenPlateAutoSend = { showSettings = false; showPlateAutoSend = true }
                         )
                     }
                     else -> {

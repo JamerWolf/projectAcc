@@ -14,8 +14,6 @@ import com.example.projectacc.parser.WhatsAppParser
 class NotificationInterceptorService : NotificationListenerService() {
     private val TAG = "NotificationInterceptor"
 
-    private val plateRequestExactPhrases = listOf("envíame la placa de tu vehículo", "enviame la placa de tu vehiculo")
-    private val allowedPlateSenders = listOf("+57 350 7867814", "Te St", "+57 316 6904939")
     private var floatingPopup: FloatingPopupManager? = null
 
     override fun onCreate() {
@@ -91,8 +89,8 @@ class NotificationInterceptorService : NotificationListenerService() {
         if (OrderStateManager.isAutoPlateEnabled.value) {
             val plate = OrderStateManager.vehiclePlate.value
             if (plate.isNotEmpty()) {
-                val isAllowedSender = allowedPlateSenders.any { sender -> title.equals(sender, ignoreCase = true) }
-                val isExactPhrase = plateRequestExactPhrases.any { phrase -> lowerText.contains(phrase) }
+                val isAllowedSender = OrderStateManager.allowedPlateSenders.value.any { sender -> title.equals(sender, ignoreCase = true) }
+                val isExactPhrase = OrderStateManager.plateRequestPhrases.value.any { phrase -> lowerText.contains(phrase) }
                 if (isAllowedSender && isExactPhrase) {
                     Log.d(TAG, "AUTO-PLACA: Solicitud de placa detectada. Abriendo chat y enviando placa...")
 

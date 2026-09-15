@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -54,6 +55,7 @@ import com.example.projectacc.update.UpdateChecker
 fun SettingsScreen(
     onBack: () -> Unit,
     onOpenSavedLocations: () -> Unit,
+    onOpenPlateAutoSend: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -131,6 +133,30 @@ fun SettingsScreen(
             singleLine = true,
             modifier = Modifier.fillMaxWidth()
         )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Plate auto-send section
+        Text(
+            text = "Envio automatico de placa",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "Configurar numeros y frases para enviar placa automaticamente.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Button(
+            onClick = { onOpenPlateAutoSend() },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(text = "Envio automatico de placa")
+        }
 
         Spacer(modifier = Modifier.height(24.dp))
 

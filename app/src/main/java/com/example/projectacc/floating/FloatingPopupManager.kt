@@ -262,11 +262,11 @@ class FloatingPopupManager(private val context: Context) {
             tvMedioPago?.visibility = android.view.View.VISIBLE
         }
 
-        // Valor a cobrar
+        // Pago al piloto (unificado para Servicio y Ruta)
         val tvValor = popupView?.findViewById<TextView>(R.id.tvValor)
-        val valorText = service.valorFormatted()
-        if (valorText != null) {
-            tvValor?.text = "💰 $valorText"
+        val pagoPiloto = service.pagoPiloto()
+        if (pagoPiloto != null) {
+            tvValor?.text = "💰 $pagoPiloto"
             tvValor?.visibility = android.view.View.VISIBLE
         }
 

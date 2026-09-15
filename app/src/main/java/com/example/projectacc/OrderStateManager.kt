@@ -32,6 +32,8 @@ object OrderStateManager {
     private const val KEY_WHATSAPP_AUTO_ACCEPT_DELAY_ENABLED = "whatsapp_auto_accept_delay_enabled"
     private const val KEY_WHATSAPP_AUTO_ACCEPT_DELAY_MS = "whatsapp_auto_accept_delay_ms"
     private const val KEY_PICAP_AUTO_ACCEPT_ENABLED = "picap_auto_accept_enabled"
+    private const val KEY_PLATE_REQUEST_PHRASES = "plate_request_phrases"
+    private const val KEY_ALLOWED_PLATE_SENDERS = "allowed_plate_senders"
 
     private var prefs: SharedPreferences? = null
 
@@ -60,6 +62,18 @@ object OrderStateManager {
         _isWhatsAppAutoAcceptDelayEnabled.value = p.getBoolean(KEY_WHATSAPP_AUTO_ACCEPT_DELAY_ENABLED, false)
         _whatsappAutoAcceptDelayMs.value = p.getLong(KEY_WHATSAPP_AUTO_ACCEPT_DELAY_MS, 0L)
         _isPicapAutoAcceptEnabled.value = p.getBoolean(KEY_PICAP_AUTO_ACCEPT_ENABLED, false)
+        _plateRequestPhrases.value = loadStringList(KEY_PLATE_REQUEST_PHRASES, listOf("envíame la placa de tu vehículo", "enviame la placa de tu vehiculo"))
+        _allowedPlateSenders.value = loadStringList(KEY_ALLOWED_PLATE_SENDERS, listOf("+57 350 7867814", "Te St", "+57 316 6904939"))
+    }
+
+    private fun loadStringList(key: String, default: List<String>): List<String> {
+        val p = prefs ?: return default
+        val raw = p.getString(key, null) ?: return default
+        return raw.split("|").filter { it.isNotBlank() }
+    }
+
+    private fun saveStringList(key: String, list: List<String>) {
+        prefs?.edit()?.putString(key, list.joinToString("|"))?.apply()
     }
 
     private val _currentOrder = MutableStateFlow<PicapOrder?>(null)
@@ -314,5 +328,45 @@ object OrderStateManager {
     fun setPicapAutoAcceptEnabled(enabled: Boolean) {
         _isPicapAutoAcceptEnabled.value = enabled
         prefs?.edit()?.putBoolean(KEY_PICAP_AUTO_ACCEPT_ENABLED, enabled)?.apply()
+    }
+
+    // Plate request phrases (exact phrases that trigger auto-plate sending)
+    private val _plateRequestPhrases = MutableStateFlow(listOf("envíame la placa de tu vehículo", "enviame la placa de tu vehiculo"))
+    val plateRequestPhrases: StateFlow<List<String>> = _plateRequestPhrases.asStateFlow()
+
+    fun setPlateRequestPhrases(phrases: List<String>) {
+        _plateRequestPhrases.value = phrases
+        saveStringList(KEY_PLATE_REQUEST_PHRASES, phrases)
+    }
+
+    fun addPlateRequestPhrase(phrase: String) {
+        val trimmed = phrase.trim()
+        if (trimmed.isNotBlank() && trimmed !in _plateRequestPhrases.value) {
+            setPlateRequestPhrases(_plateRequestPhrases.value + trimmed)
+        }
+    }
+
+    fun removePlateRequestPhrase(phrase: String) {
+        setPlateRequestPhrases(_plateRequestPhrases.value - phrase)
+    }
+
+    // Allowed plate senders (phone numbers/names that can request the plate)
+    private val _allowedPlateSenders = MutableStateFlow(listOf("+57 350 7867814", "Te St", "+57 316 6904939"))
+    val allowedPlateSenders: StateFlow<List<String>> = _allowedPlateSenders.asStateFlow()
+
+    fun setAllowedPlateSenders(senders: List<String>) {
+        _allowedPlateSenders.value = senders
+        saveStringList(KEY_ALLOWED_PLATE_SENDERS, senders)
+    }
+
+    fun addAllowedPlateSender(sender: String) {
+        val trimmed = sender.trim()
+        if (trimmed.isNotBlank() && trimmed !in _allowedPlateSenders.value) {
+            setAllowedPlateSenders(_allowedPlateSenders.value + trimmed)
+        }
+    }
+
+    fun removeAllowedPlateSender(sender: String) {
+        setAllowedPlateSenders(_allowedPlateSenders.value - sender)
     }
 }

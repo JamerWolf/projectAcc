@@ -303,30 +303,30 @@ private fun WhatsAppOrderCard(service: WhatsAppService, onDismiss: () -> Unit) {
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Pago
-            if (service.pago.isNotEmpty()) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(text = "\uD83D\uDCB3", style = MaterialTheme.typography.bodyLarge)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Pago: ${service.pago}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            // Valor
-            if (service.valorCobrar.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(4.dp))
+            // Pago al piloto (unificado para Servicio y Ruta)
+            if (service.pagoPiloto() != null) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(text = "\uD83D\uDCB0", style = MaterialTheme.typography.titleMedium)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = service.valorCobrar,
+                        text = service.pagoPiloto()!!,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+
+            // Valor a cobrar
+            if (service.valorCobrar.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(text = "\uD83D\uDCB3", style = MaterialTheme.typography.bodyLarge)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Cobrar: ${service.valorCobrar}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
