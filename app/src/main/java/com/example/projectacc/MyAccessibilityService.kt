@@ -412,6 +412,20 @@ class MyAccessibilityService : AccessibilityService() {
             return
         }
 
+        // Check if sender is in allowed list
+        val senders = OrderStateManager.allowedPlateSenders.value
+        if (senders.isNotEmpty()) {
+            // First line of last message block is usually the sender name/number in group chats
+            val firstLine = lastMessageBlock.substringBefore("\n").trim()
+            val isAllowedSender = senders.any { sender ->
+                firstLine.startsWith(sender, ignoreCase = true)
+            }
+            if (!isAllowedSender) {
+                Log.d(TAG, "WHATSAPP: Remitente '$firstLine' no esta en la lista de permitidos. Ignorando.")
+                return
+            }
+        }
+
         // 1. AUTO-PLATE: Disabled here - handled by NotificationInterceptorService
 
         // 2. SERVICE MESSAGE: Only if at least one switch is enabled
