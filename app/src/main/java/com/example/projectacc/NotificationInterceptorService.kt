@@ -89,7 +89,10 @@ class NotificationInterceptorService : NotificationListenerService() {
         if (OrderStateManager.isAutoPlateEnabled.value) {
             val plate = OrderStateManager.vehiclePlate.value
             if (plate.isNotEmpty()) {
-                val isAllowedSender = OrderStateManager.allowedPlateSenders.value.any { sender -> title.equals(sender, ignoreCase = true) }
+                val isAllowedSender = OrderStateManager.allowedPlateSenders.value.any { sender ->
+                    title.equals(sender, ignoreCase = true) ||
+                    text.startsWith(sender, ignoreCase = true)
+                }
                 val isExactPhrase = OrderStateManager.plateRequestPhrases.value.any { phrase -> lowerText.contains(phrase) }
                 if (isAllowedSender && isExactPhrase) {
                     Log.d(TAG, "AUTO-PLACA: Solicitud de placa detectada. Abriendo chat y enviando placa...")
@@ -123,6 +126,21 @@ class NotificationInterceptorService : NotificationListenerService() {
         }
 
         // 2. AUTO-SERVICIO
+        // Only process services from allowed senders
+        val senders = OrderStateManager.allowedPlateSenders.value
+        if (senders.isNotEmpty()) {
+            // In group notifications: title = group name, text starts with sender name/number
+            // Check both title (individual chats) and text (group chats where sender is in text)
+            val isAllowedSender = senders.any { sender ->
+                title.equals(sender, ignoreCase = true) ||
+                text.startsWith(sender, ignoreCase = true)
+            }
+            if (!isAllowedSender) {
+                Log.d(TAG, "AUTO-SERVICIO: Remitente '$title' no esta en la lista de permitidos. Ignorando.")
+                return
+            }
+        }
+
         // Only auto-respond from "Pilotos Pibox Cruz Verde Cucuta" group
         val allowedGroup = "pilotos pibox cruz verde cucuta"
         if (!lowerText.contains(allowedGroup)) {
