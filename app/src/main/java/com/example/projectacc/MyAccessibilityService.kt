@@ -401,8 +401,8 @@ class MyAccessibilityService : AccessibilityService() {
      *   Message content...
      *   7:22 p. m.   <-- timestamp ends the block
      *
-     * Strategy: find the last timestamp, then search backwards for the ~ Name line
-     * that comes before the message content (⚡, 🏷️, etc.)
+     * When same person sends multiple messages, ~ only appears on the first one.
+     * Strategy: search backwards through message blocks until we find a ~ line.
      */
     private fun findLastSender(fullText: String): String {
         // Find all timestamp positions
@@ -410,25 +410,37 @@ class MyAccessibilityService : AccessibilityService() {
             Triple(it.range.first, it.range.last, it.value)
         }.toList()
 
-        if (timestamps.isEmpty()) return ""
+        if (timestamps.size < 2) return ""
 
-        // Last timestamp ends the current message block
-        val lastTsStart = timestamps.last().first
+        // Walk backwards through message blocks looking for ~ Name
+        for (i in timestamps.indices.reversed()) {
+            if (i == 0) break
 
-        // Search backwards from the last timestamp for the sender line (~ Name)
-        // The sender is always before the message content markers
-        val beforeTs = fullText.substring(0, lastTsStart)
-        val lines = beforeTs.split("\n").map { it.trim() }.filter { it.isNotBlank() }
+            val blockStart = timestamps[i - 1].second + 1
+            val blockEnd = timestamps[i].first
 
-        // Walk backwards to find ~ Name
-        for (i in lines.indices.reversed()) {
-            val line = lines[i]
-            if (line.startsWith("~")) {
-                return line.removePrefix("~").replace(",", "").trim()
+            if (blockStart >= blockEnd) continue
+
+            val block = fullText.substring(blockStart, blockEnd).trim()
+            val lines = block.split("\n").map { it.trim() }.filter { it.isNotBlank() }
+
+            // Look for ~ Name in this block
+            for (line in lines) {
+                if (line.startsWith("~")) {
+                    return line.removePrefix("~").trim()
+                }
             }
-            // Stop if we hit a timestamp (previous message boundary) or message content
-            if (timestampRegex.containsMatchIn(line)) break
-            if (line.startsWith("⚡") || line.startsWith("🏷️") || line.startsWith("👉")) break
+        }
+
+        // Also check before the first timestamp (sender might be at the very top)
+        if (timestamps.isNotEmpty()) {
+            val beforeFirst = fullText.substring(0, timestamps.first().first).trim()
+            val lines = beforeFirst.split("\n").map { it.trim() }.filter { it.isNotBlank() }
+            for (line in lines) {
+                if (line.startsWith("~")) {
+                    return line.removePrefix("~").trim()
+                }
+            }
         }
 
         return ""
