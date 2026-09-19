@@ -410,14 +410,13 @@ class MyAccessibilityService : AccessibilityService() {
             Triple(it.range.first, it.range.last, it.value)
         }.toList()
 
-        if (timestamps.size < 2) return ""
+        if (timestamps.isEmpty()) return ""
 
         // Walk backwards through message blocks looking for ~ Name
+        // Start from the last block (after last timestamp... no, between timestamps)
         for (i in timestamps.indices.reversed()) {
-            if (i == 0) break
-
-            val blockStart = timestamps[i - 1].second + 1
             val blockEnd = timestamps[i].first
+            val blockStart = if (i > 0) timestamps[i - 1].second + 1 else 0
 
             if (blockStart >= blockEnd) continue
 
@@ -425,17 +424,6 @@ class MyAccessibilityService : AccessibilityService() {
             val lines = block.split("\n").map { it.trim() }.filter { it.isNotBlank() }
 
             // Look for ~ Name in this block
-            for (line in lines) {
-                if (line.startsWith("~")) {
-                    return line.removePrefix("~").trim()
-                }
-            }
-        }
-
-        // Also check before the first timestamp (sender might be at the very top)
-        if (timestamps.isNotEmpty()) {
-            val beforeFirst = fullText.substring(0, timestamps.first().first).trim()
-            val lines = beforeFirst.split("\n").map { it.trim() }.filter { it.isNotBlank() }
             for (line in lines) {
                 if (line.startsWith("~")) {
                     return line.removePrefix("~").trim()
