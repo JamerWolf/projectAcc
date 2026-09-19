@@ -389,9 +389,70 @@ class MyAccessibilityService : AccessibilityService() {
         }
     }
 
+    // Pattern for WhatsApp timestamps like "7:22 p. m." or "19:22"
+    private val timestampRegex = Regex("\\d{1,2}:\\d{2}\\s*(?:a\\.?\\s*m\\.?|p\\.?\\s*m\\.?|AM|PM)?", RegexOption.IGNORE_CASE)
+
+    /**
+     * Extracts the sender name/number from the full text.
+     * WhatsApp group structure per message block:
+     *   ~ Name
+     *   Maybe Name
+     *   Phone or @username
+     *   Message content...
+     *   7:22 p. m.   <-- timestamp ends the block
+     *
+     * Strategy: find all timestamps, get the block between the last two timestamps,
+     * then find the ~ Name line in that block.
+     */
+    private fun findLastSender(fullText: String): String {
+        // Find all timestamp positions
+        val timestamps = timestampRegex.findAll(fullText).map {
+            Triple(it.range.first, it.range.last, it.value)
+        }.toList()
+
+        if (timestamps.size < 2) return ""
+
+        // Last timestamp ends the current message block
+        val lastTsEnd = timestamps.last().second
+        // Previous timestamp ends the prior message block
+        val prevTsEnd = timestamps[timestamps.size - 2].second
+
+        // Extract the block between previous timestamp and last timestamp
+        // Start after the previous timestamp text
+        val blockStart = timestamps[timestamps.size - 2].second + 1
+        val blockEnd = lastTsEnd
+
+        if (blockStart >= blockEnd) return ""
+
+        val block = fullText.substring(blockStart, blockEnd).trim()
+        val lines = block.split("\n").map { it.trim() }.filter { it.isNotBlank() }
+
+        // Walk lines to find sender: look for ~ Name pattern
+        for (i in lines.indices) {
+            val line = lines[i]
+            if (line.startsWith("~")) {
+                // Return the name after ~ (e.g. "~ Duarte 🇨🇴" -> "Duarte 🇨🇴")
+                return line.removePrefix("~").trim()
+            }
+        }
+
+        // Fallback: if no ~ found, check for Maybe pattern
+        for (i in lines.indices) {
+            val line = lines[i]
+            if (line.startsWith("Maybe")) {
+                return line.removePrefix("Maybe").trim()
+            }
+        }
+
+        return ""
+    }
+
     private suspend fun processWhatsAppText(fullText: String) {
         if (fullText.isEmpty()) return
 
+        Log.d(TAG, "WHATSAPP: === TEXTO COMPLETO LEIDO DE WHATSAPP ===")
+        Log.d(TAG, fullText)
+        Log.d(TAG, "WHATSAPP: === FIN DEL TEXTO ===")
         Log.d(TAG, "WHATSAPP: Procesando texto en background (${fullText.length} chars)")
 
         // 0. SKIP RESPONSE MESSAGES and PLATE REQUESTS
@@ -415,13 +476,13 @@ class MyAccessibilityService : AccessibilityService() {
         // Check if sender is in allowed list
         val senders = OrderStateManager.allowedPlateSenders.value
         if (senders.isNotEmpty()) {
-            // First line of last message block is usually the sender name/number in group chats
-            val firstLine = lastMessageBlock.substringBefore("\n").trim()
-            val isAllowedSender = senders.any { sender ->
-                firstLine.startsWith(sender, ignoreCase = true)
+            // Sender is the line ABOVE the last message block in group chats
+            val sender = findLastSender(lowerText)
+            val isAllowedSender = senders.any { allowedSender ->
+                sender.startsWith(allowedSender, ignoreCase = true)
             }
             if (!isAllowedSender) {
-                Log.d(TAG, "WHATSAPP: Remitente '$firstLine' no esta en la lista de permitidos. Ignorando.")
+                Log.d(TAG, "WHATSAPP: Remitente '$sender' no esta en la lista de permitidos. Ignorando.")
                 return
             }
         }
