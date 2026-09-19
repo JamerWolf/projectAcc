@@ -437,9 +437,6 @@ class MyAccessibilityService : AccessibilityService() {
     private suspend fun processWhatsAppText(fullText: String) {
         if (fullText.isEmpty()) return
 
-        Log.d(TAG, "WHATSAPP: === TEXTO COMPLETO LEIDO DE WHATSAPP ===")
-        Log.d(TAG, fullText)
-        Log.d(TAG, "WHATSAPP: === FIN DEL TEXTO ===")
         Log.d(TAG, "WHATSAPP: Procesando texto en background (${fullText.length} chars)")
 
         // 0. SKIP RESPONSE MESSAGES and PLATE REQUESTS
