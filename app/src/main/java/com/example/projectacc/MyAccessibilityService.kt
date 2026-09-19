@@ -401,8 +401,8 @@ class MyAccessibilityService : AccessibilityService() {
      *   Message content...
      *   7:22 p. m.   <-- timestamp ends the block
      *
-     * Strategy: find all timestamps, get the block between the last two timestamps,
-     * then find the ~ Name line in that block.
+     * Strategy: find the last timestamp, then search backwards for the ~ Name line
+     * that comes before the message content (⚡, 🏷️, etc.)
      */
     private fun findLastSender(fullText: String): String {
         // Find all timestamp positions
@@ -410,38 +410,25 @@ class MyAccessibilityService : AccessibilityService() {
             Triple(it.range.first, it.range.last, it.value)
         }.toList()
 
-        if (timestamps.size < 2) return ""
+        if (timestamps.isEmpty()) return ""
 
         // Last timestamp ends the current message block
-        val lastTsEnd = timestamps.last().second
-        // Previous timestamp ends the prior message block
-        val prevTsEnd = timestamps[timestamps.size - 2].second
+        val lastTsStart = timestamps.last().first
 
-        // Extract the block between previous timestamp and last timestamp
-        // Start after the previous timestamp text
-        val blockStart = timestamps[timestamps.size - 2].second + 1
-        val blockEnd = lastTsEnd
+        // Search backwards from the last timestamp for the sender line (~ Name)
+        // The sender is always before the message content markers
+        val beforeTs = fullText.substring(0, lastTsStart)
+        val lines = beforeTs.split("\n").map { it.trim() }.filter { it.isNotBlank() }
 
-        if (blockStart >= blockEnd) return ""
-
-        val block = fullText.substring(blockStart, blockEnd).trim()
-        val lines = block.split("\n").map { it.trim() }.filter { it.isNotBlank() }
-
-        // Walk lines to find sender: look for ~ Name pattern
-        for (i in lines.indices) {
+        // Walk backwards to find ~ Name
+        for (i in lines.indices.reversed()) {
             val line = lines[i]
             if (line.startsWith("~")) {
-                // Return the name after ~ (e.g. "~ Duarte 🇨🇴" -> "Duarte 🇨🇴")
-                return line.removePrefix("~").trim()
+                return line.removePrefix("~").replace(",", "").trim()
             }
-        }
-
-        // Fallback: if no ~ found, check for Maybe pattern
-        for (i in lines.indices) {
-            val line = lines[i]
-            if (line.startsWith("Maybe")) {
-                return line.removePrefix("Maybe").trim()
-            }
+            // Stop if we hit a timestamp (previous message boundary) or message content
+            if (timestampRegex.containsMatchIn(line)) break
+            if (line.startsWith("⚡") || line.startsWith("🏷️") || line.startsWith("👉")) break
         }
 
         return ""
