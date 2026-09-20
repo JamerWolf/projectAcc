@@ -368,6 +368,9 @@ class MyAccessibilityService : AccessibilityService() {
         }
     }
 
+    // Cache last known sender for when WhatsApp doesn't show ~ on repeated messages from same person
+    private var lastKnownSender: String = ""
+
     // Patterns that indicate this is a RESPONSE message (not a service offer)
     private val responsePatterns =
         listOf("genial", "asignarte", "envíame la placa", "enviame la placa")
@@ -460,13 +463,18 @@ class MyAccessibilityService : AccessibilityService() {
         // Check if sender is in allowed list
         val senders = OrderStateManager.allowedPlateSenders.value
         if (senders.isNotEmpty()) {
-            // Sender is the line ABOVE the last message block in group chats
             val sender = findLastSender(lowerText)
+            val effectiveSender = if (sender.isNotEmpty()) {
+                lastKnownSender = sender
+                sender
+            } else {
+                lastKnownSender
+            }
             val isAllowedSender = senders.any { allowedSender ->
-                sender.startsWith(allowedSender, ignoreCase = true)
+                effectiveSender.startsWith(allowedSender, ignoreCase = true)
             }
             if (!isAllowedSender) {
-                Log.d(TAG, "WHATSAPP: Remitente '$sender' no esta en la lista de permitidos. Ignorando.")
+                Log.d(TAG, "WHATSAPP: Remitente '$effectiveSender' no esta en la lista de permitidos. Ignorando.")
                 return
             }
         }
