@@ -1,18 +1,19 @@
 {
   "lens": "reliability",
   "evidence": [
-    "Reviewed staged diff in app/src/main/java/com/example/projectacc/MainActivity.kt:543-579 where the distance auto-accept section (divider, switch, slider) is now nested inside an isPicapAutoAcceptEnabled conditional, plus .gentle-review artifact updates",
-    "Traced the gate at MyAccessibilityService.kt:320 (isPicapAutoAcceptEnabled && shouldAutoAccept) confirming distance acceptance was already dead when the master switch is off; this change only aligns UI visibility with that runtime behavior"
+    "Reviewed staged diff of app/build.gradle.kts:18-19 (versionCode 46 to 47, versionName 0.3.31 to 0.3.32) plus .gentle-review artifact updates; feature code unchanged from commit 8bf7d2e",
+    "Commit 8bf7d2e (distance section nesting) already passed pre-commit and pre-push gates under lineage review-ec40c456750c3c83; this release diff adds only the version identity"
   ],
   "findings": [
     {
       "id": "rel-1",
       "lens": "reliability",
       "severity": "SUGGESTION",
-      "location": "app/src/main/java/com/example/projectacc/MainActivity.kt:543 distance section hidden while state persists",
-      "claim": "When the master switch is off, the distance switch and slider are removed from composition rather than disabled, so the persisted km threshold is invisible until the master is re-enabled. Runtime behavior is unchanged (condition 3 was already gated), noted for UX awareness only.",
+      "location": "app/build.gradle.kts:18-19 version bump for release 0.3.32",
+      "claim": "Release diff contains only a version identity change (versionCode 46 to 47); runtime behavior identical to commit 8bf7d2e which already passed both gates. No regression surface beyond install/update identity, versionCode remains monotonic.",
       "proof_refs": [
-        "app/src/main/java/com/example/projectacc/MainActivity.kt:543 if (isPicapAutoAcceptEnabled) wraps divider, distance switch and slider"
+        "app/build.gradle.kts:18 versionCode = 47",
+        "app/build.gradle.kts:19 versionName = 0.3.32"
       ],
       "causal_disposition": "introduced"
     }
