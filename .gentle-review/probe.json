@@ -1,0 +1,1 @@
+{"lens":"review-reliability","findings":[{"id":"rel-1","severity":"WARNING","path":"app/src/main/java/com/example/projectacc/model/WhatsAppService.kt","evidence":"extractCashAmount ignores the pago field","reasoning":"cash detection miss path introduced"}],"summary":"probe"}

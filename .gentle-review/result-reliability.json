@@ -1,0 +1,44 @@
+{
+    "lens":  "reliability",
+    "evidence":  [
+                     "Reviewed staged diff (3 tracked files) plus workspace scope for review-500ffbc8e95a5fe2: PicapOrder km fields, parseOrder km extraction, OrderCard total km line, version bump 0.3.30",
+                     "Traced extractKmFromPickup sentinel semantics (999.0 = not found), its existing use in shouldAutoAccept, and all PicapOrder construction sites (single constructor call in parseOrder at MyAccessibilityService.kt:815-823)"
+                 ],
+    "findings":  [
+                     {
+                         "id":  "rel-1",
+                         "lens":  "reliability",
+                         "severity":  "SUGGESTION",
+                         "location":  "app/src/main/java/com/example/projectacc/OrderCard.kt:88-95 total km display",
+                         "claim":  "When only one of the two legs carries a parsed km value, the single-leg distance is still labeled \u0027X km total\u0027, which can understate the real total if Picap omits distance in one leg\u0027s time string. Consider labeling with the sum plus per-leg values, or hiding the line when only one leg is known.",
+                         "proof_refs":  [
+                                            "app/src/main/java/com/example/projectacc/OrderCard.kt:88 val totalKm = order.kmRecogida + order.kmEntrega",
+                                            "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt:818-820 kmRec/kmEnt default to 0.0 when sentinel 999.0 filtered"
+                                        ],
+                         "causal_disposition":  "introduced"
+                     },
+                     {
+                         "id":  "rel-2",
+                         "lens":  "reliability",
+                         "severity":  "SUGGESTION",
+                         "location":  "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt:793-794 delivery capture pattern",
+                         "claim":  "Delivery km extraction depends on tiempoEnt matching \u0027min (\u0027 or \u0027mins (\u0027 with a parenthesized distance; a future Picap format without the parenthesized distance silently yields kmEnt=0.0 and a reduced total with no log signal.",
+                         "proof_refs":  [
+                                            "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt:794 if ((current.contains(\"min (\") || current.contains(\"mins (\")) \u0026\u0026 !current.startsWith(\"A \"))",
+                                            "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt:891-899 extractKmFromPickup returns 999.0 sentinel when regex does not match"
+                                        ],
+                         "causal_disposition":  "introduced"
+                     },
+                     {
+                         "id":  "rel-3",
+                         "lens":  "reliability",
+                         "severity":  "SUGGESTION",
+                         "location":  "app/src/main/java/com/example/projectacc/OrderCard.kt:91 String.format default locale",
+                         "claim":  "String.format(\"%.1f\", totalKm) without an explicit Locale renders a decimal comma under es_CO/es_ES device locales (\u00277,7 km\u0027) while the rest of the app mixes both conventions; cosmetic inconsistency only.",
+                         "proof_refs":  [
+                                            "app/src/main/java/com/example/projectacc/OrderCard.kt:91 total km text uses String.format without explicit Locale"
+                                        ],
+                         "causal_disposition":  "introduced"
+                     }
+                 ]
+}

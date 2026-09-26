@@ -32,7 +32,9 @@ data class PicapOrder(
     val direccionRecogida: String = "",
     val tiempoEntrega: String = "",
     val direccionEntrega: String = "",
-    val servicio: String = ""
+    val servicio: String = "",
+    val kmRecogida: Double = 0.0,
+    val kmEntrega: Double = 0.0
 )
 
 @Suppress("DEPRECATION")
@@ -810,7 +812,11 @@ class MyAccessibilityService : AccessibilityService() {
         val servicio = texts.firstOrNull {
             it.contains("cruz verde", ignoreCase = true) && it != dirRec && it != dirEnt
         } ?: ""
-        return PicapOrder(id, ganancia, tiempoRec, dirRec, tiempoEnt, dirEnt, servicio)
+        // Km embebidos en los strings de tiempo: "A 9 mins (4.31 km)" / "12 min (3.4 km)".
+        // extractKmFromPickup devuelve 999.0 como centinela de "no encontrado".
+        val kmRec = extractKmFromPickup(tiempoRec).takeIf { it < 999.0 } ?: 0.0
+        val kmEnt = extractKmFromPickup(tiempoEnt).takeIf { it < 999.0 } ?: 0.0
+        return PicapOrder(id, ganancia, tiempoRec, dirRec, tiempoEnt, dirEnt, servicio, kmRec, kmEnt)
     }
 
     /**

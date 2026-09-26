@@ -88,6 +88,17 @@ private fun PicapOrderCard(order: PicapOrder, onDismiss: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurface
             )
 
+            // Km totales (recogida + entrega) debajo del título
+            val totalKm = order.kmRecogida + order.kmEntrega
+            if (totalKm > 0.0) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "\uD83D\uDCCF ${String.format("%.1f", totalKm)} km total",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
             Spacer(modifier = Modifier.height(12.dp))
 
             // Ganancia
