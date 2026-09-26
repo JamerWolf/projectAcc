@@ -1,12 +1,6 @@
-Verification evidence for Picap total-km overlay next to the price node (branch downgrade/v0.3.28):
+Verification evidence for release version bump to 0.3.33 (branch downgrade/v0.3.28):
 
-1. Build: .\gradlew.bat assembleDebug -> BUILD SUCCESSFUL (35 tasks) after adding overlay code to MyAccessibilityService.kt; one intermediate compile failure fixed (PixelFormat imported from android.graphics, not android.view). Only pre-existing deprecation warnings remain.
-2. Diff scope: app/src/main/java/com/example/projectacc/MyAccessibilityService.kt (imports, kmOverlayTextView/kmOverlayAttached fields, findNodeBoundsByContentDescription, updateKmOverlay, showKmOverlay, hideKmOverlay, hooks at processPicapWindow/handlePicapEvent/onDestroy) + .gentle-review artifact updates.
-3. Behavioral checks:
-   - Anchor = exact contentDescription match of order.ganancia, the same node parseOrder already reads (app/src/main/java/com/example/projectacc/MyAccessibilityService.kt:801 ganancia = texts[i+1] after the Tu ganancia final label).
-   - Overlay shown only when total km is greater than zero and ganancia is non-empty; positioned at anchor.right plus 8dp, vertically centered via measured height, gravity TOP/START.
-   - Window flags FLAG_NOT_TOUCHABLE or FLAG_NOT_FOCUSABLE so the overlay can never intercept taps on the Aceptar button.
-   - Hidden when order id is empty, when no Picap windows are visible, after successful auto-accept click, and in onDestroy (no window leak).
-   - updateViewLayout used when already attached, so repeated events update position without adding duplicate views.
-   - Permission guarded by Settings.canDrawOverlays; TYPE_APPLICATION_OVERLAY matches the existing FloatingPopupManager contract (no new permission).
-4. No automated unit test suite exists for these modules; verification is compile + package success plus the reliability lens review (0 BLOCKER/CRITICAL, 3 SUGGESTIONs).
+1. Build: .\gradlew.bat assembleDebug -> BUILD SUCCESSFUL (35 tasks) after bumping version in app/build.gradle.kts; no code changes in this commit beyond the version fields.
+2. aapt dump badging (build-tools 36.0.0) on app/build/outputs/apk/debug/app-debug.apk reports: package name com.example.projectacc, versionCode 48, versionName 0.3.33. Matches the intended release.
+3. Diff scope: app/build.gradle.kts (lines 18-19) + .gentle-review artifact updates only. The km-overlay feature itself was shipped and gate-approved in commit d812913 (lineage review-60e08663bca43d13, gates allow/allow).
+4. Release conventions: debug APK (release-signed builds rejected by installer), asset name app-debug.apk matching releases v0.3.30-v0.3.32, target branch downgrade/v0.3.28. Release gate (gentle-ai review validate --gate release) remains unavailable in this environment as previously disclosed and approved by the maintainer; pre-commit and pre-push gates are enforced for this commit.

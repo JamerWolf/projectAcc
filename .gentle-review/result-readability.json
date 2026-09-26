@@ -1,0 +1,21 @@
+{
+  "lens": "reliability",
+  "evidence": [
+    "Reviewed staged diff in app/build.gradle.kts defaultConfig: versionCode 47 to 48 and versionName 0.3.32 to 0.3.33 (standard tier, configuration-only change per review rules) plus .gentle-review artifact updates",
+    "aapt dump badging on app/build/outputs/apk/debug/app-debug.apk reports package com.example.projectacc versionCode 48 versionName 0.3.33, confirming the bump matches the built artifact (build-tools 36.0.0)"
+  ],
+  "findings": [
+    {
+      "id": "rel-1",
+      "lens": "reliability",
+      "severity": "SUGGESTION",
+      "location": "app/build.gradle.kts:18-19 versionCode and versionName maintained manually",
+      "claim": "versionCode and versionName are bumped by hand on every release with no central release config or automation; forgetting versionCode while bumping versionName would silently keep the old code and block package updates or cause downgrade installs to fail. The current chore-release convention plus aapt verification mitigates but does not remove the regression risk.",
+      "proof_refs": [
+        "app/build.gradle.kts:18 versionCode = 48",
+        "app/build.gradle.kts:19 versionName = \"0.3.33\""
+      ],
+      "causal_disposition": "pre-existing"
+    }
+  ]
+}
