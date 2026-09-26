@@ -1,18 +1,19 @@
 {
   "lens": "reliability",
   "evidence": [
-    "Reviewed staged diff in app/src/main/java/com/example/projectacc/MyAccessibilityService.kt (imports, km overlay fields and functions, hooks in processPicapWindow/handlePicapEvent/onDestroy) plus .gentle-review artifact updates",
-    "Overlay anchors to the exact contentDescription node that parseOrder already extracted as ganancia (commit lineage pattern from 711bc0b); WindowManager TYPE_APPLICATION_OVERLAY usage mirrors FloatingPopupManager which already ships the WhatsApp popup"
+    "Reviewed staged diff in app/src/main/java/com/example/projectacc/MyAccessibilityService.kt showKmOverlay (FLAG_LAYOUT_IN_SCREEN added to the overlay window flags at line 931, diagnostic log enriched at line 951), app/build.gradle.kts version bump lines 18-19, and .gentle-review artifact updates",
+    "Screenshot evidence from the user shows the km pill rendering about one text line below the anchored price node while the horizontal offset matches anchor.right, the signature of a vertical coordinate-space mismatch between getBoundsInScreen screen coordinates and an overlay window origin placed below the status bar"
   ],
   "findings": [
     {
       "id": "rel-1",
       "lens": "reliability",
       "severity": "SUGGESTION",
-      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt:835-850 updateKmOverlay lifecycle on events only",
-      "claim": "Overlay show and hide are driven exclusively by accessibility events; if Picap closes the detail popup without emitting an event (rare), the overlay could linger until the next Picap event or service destroy. Mitigated by WINDOW_STATE_CHANGED firing on popup transitions and by hide hooks in handlePicapEvent and onDestroy.",
+      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt:931 FLAG_LAYOUT_IN_SCREEN coordinate-space fix not yet device-verified",
+      "claim": "The status-bar inset is the inferred root cause of the reported vertical offset; FLAG_LAYOUT_IN_SCREEN should align the overlay origin with getBoundsInScreen coordinates, but this remains a hypothesis until the user confirms on device. The enriched log at line 951 emits computed y, measured height, status bar height, and anchor rect, so a residual mismatch is diagnosable from one logcat line.",
       "proof_refs": [
-        "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt:850 updateKmOverlay called from processPicapWindow after id validation"
+        "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt:931 FLAG_LAYOUT_IN_SCREEN added to window flags",
+        "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt:951 KM_OVERLAY diagnostic log with y, height, status bar, anchor rect"
       ],
       "causal_disposition": "introduced"
     },
@@ -20,23 +21,13 @@
       "id": "rel-2",
       "lens": "reliability",
       "severity": "SUGGESTION",
-      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt:870-876 exact contentDescription anchor match",
-      "claim": "findNodeBoundsByContentDescription requires an exact string match against order.ganancia; if Picap ever renders the price with different formatting between the parsed CD and the node CD, the overlay silently hides (safe failure, no crash or misplacement).",
+      "location": "app/build.gradle.kts:18-19 versionCode and versionName maintained manually",
+      "claim": "versionCode and versionName are bumped by hand on every release; forgetting versionCode while bumping versionName would silently keep the old code and block package updates. The chore-release convention plus aapt verification mitigates but does not remove the regression risk.",
       "proof_refs": [
-        "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt:870 if (node.contentDescription.toString() == contentDescription)"
+        "app/build.gradle.kts:18 versionCode = 49",
+        "app/build.gradle.kts:19 versionName = 0.3.34"
       ],
-      "causal_disposition": "introduced"
-    },
-    {
-      "id": "rel-3",
-      "lens": "reliability",
-      "severity": "SUGGESTION",
-      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt:893-898 overlay permission guard",
-      "claim": "showKmOverlay depends on Settings.canDrawOverlays; if the user revokes the overlay permission the feature degrades to a logged warning without user-visible feedback. Same permission contract already required by the WhatsApp popup, so no new permission surface.",
-      "proof_refs": [
-        "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt:893 if (!Settings.canDrawOverlays(this))"
-      ],
-      "causal_disposition": "introduced"
+      "causal_disposition": "pre-existing"
     }
   ]
 }

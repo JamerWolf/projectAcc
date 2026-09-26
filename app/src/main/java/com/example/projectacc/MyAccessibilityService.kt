@@ -927,7 +927,8 @@ class MyAccessibilityService : AccessibilityService() {
                 WindowManager.LayoutParams.WRAP_CONTENT,
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
                 WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
-                        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                        WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                 PixelFormat.TRANSLUCENT
             ).apply {
                 gravity = Gravity.TOP or Gravity.START
@@ -943,9 +944,11 @@ class MyAccessibilityService : AccessibilityService() {
             } else {
                 wm.addView(tv, params)
                 kmOverlayAttached = true
+                val sbResId = resources.getIdentifier("status_bar_height", "dimen", "android")
+                val sbH = if (sbResId > 0) resources.getDimensionPixelSize(sbResId) else 0
                 Log.d(
                     TAG,
-                    "KM_OVERLAY: visible total=${String.format("%.1f", totalKm)} km, precio en ${anchor.toShortString()}"
+                    "KM_OVERLAY: visible total=${String.format("%.1f", totalKm)} km y=${params.y} h=${tv.measuredHeight} sb=$sbH rect=${anchor.toShortString()}"
                 )
             }
         } catch (e: Exception) {
