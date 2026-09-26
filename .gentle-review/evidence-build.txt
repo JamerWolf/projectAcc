@@ -1,7 +1,12 @@
-Verification evidence for release 0.3.32 (branch downgrade/v0.3.28):
+Verification evidence for Picap total-km overlay next to the price node (branch downgrade/v0.3.28):
 
-1. Build: .\gradlew.bat assembleDebug -> BUILD SUCCESSFUL (35 tasks) with versionCode 47 / versionName 0.3.32. Only pre-existing deprecation warnings (TabRow/Divider).
-2. Diff scope: app/build.gradle.kts:18-19 version bump only (feature commit 8bf7d2e already gated under lineage review-ec40c456750c3c83 with pre-commit and pre-push allow) + .gentle-review artifact updates.
-3. APK artifact: app\build\outputs\apk\debug\app-debug.apk rebuilt from versionCode 47 tree; will be verified post-upload with aapt dump badging and SHA256 comparison.
-4. Feature content in this release: distance auto-accept controls (divider, switch, slider) hidden while the master Auto-Aceptar switch is off; runtime gating unchanged at MyAccessibilityService.kt:320.
-5. No automated unit test suite exists; verification is compile + package success plus the reliability lens review (0 BLOCKER/CRITICAL, 1 SUGGESTION).
+1. Build: .\gradlew.bat assembleDebug -> BUILD SUCCESSFUL (35 tasks) after adding overlay code to MyAccessibilityService.kt; one intermediate compile failure fixed (PixelFormat imported from android.graphics, not android.view). Only pre-existing deprecation warnings remain.
+2. Diff scope: app/src/main/java/com/example/projectacc/MyAccessibilityService.kt (imports, kmOverlayTextView/kmOverlayAttached fields, findNodeBoundsByContentDescription, updateKmOverlay, showKmOverlay, hideKmOverlay, hooks at processPicapWindow/handlePicapEvent/onDestroy) + .gentle-review artifact updates.
+3. Behavioral checks:
+   - Anchor = exact contentDescription match of order.ganancia, the same node parseOrder already reads (app/src/main/java/com/example/projectacc/MyAccessibilityService.kt:801 ganancia = texts[i+1] after the Tu ganancia final label).
+   - Overlay shown only when total km is greater than zero and ganancia is non-empty; positioned at anchor.right plus 8dp, vertically centered via measured height, gravity TOP/START.
+   - Window flags FLAG_NOT_TOUCHABLE or FLAG_NOT_FOCUSABLE so the overlay can never intercept taps on the Aceptar button.
+   - Hidden when order id is empty, when no Picap windows are visible, after successful auto-accept click, and in onDestroy (no window leak).
+   - updateViewLayout used when already attached, so repeated events update position without adding duplicate views.
+   - Permission guarded by Settings.canDrawOverlays; TYPE_APPLICATION_OVERLAY matches the existing FloatingPopupManager contract (no new permission).
+4. No automated unit test suite exists for these modules; verification is compile + package success plus the reliability lens review (0 BLOCKER/CRITICAL, 3 SUGGESTIONs).

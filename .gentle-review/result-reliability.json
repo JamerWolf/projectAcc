@@ -1,19 +1,40 @@
 {
   "lens": "reliability",
   "evidence": [
-    "Reviewed staged diff of app/build.gradle.kts:18-19 (versionCode 46 to 47, versionName 0.3.31 to 0.3.32) plus .gentle-review artifact updates; feature code unchanged from commit 8bf7d2e",
-    "Commit 8bf7d2e (distance section nesting) already passed pre-commit and pre-push gates under lineage review-ec40c456750c3c83; this release diff adds only the version identity"
+    "Reviewed staged diff in app/src/main/java/com/example/projectacc/MyAccessibilityService.kt (imports, km overlay fields and functions, hooks in processPicapWindow/handlePicapEvent/onDestroy) plus .gentle-review artifact updates",
+    "Overlay anchors to the exact contentDescription node that parseOrder already extracted as ganancia (commit lineage pattern from 711bc0b); WindowManager TYPE_APPLICATION_OVERLAY usage mirrors FloatingPopupManager which already ships the WhatsApp popup"
   ],
   "findings": [
     {
       "id": "rel-1",
       "lens": "reliability",
       "severity": "SUGGESTION",
-      "location": "app/build.gradle.kts:18-19 version bump for release 0.3.32",
-      "claim": "Release diff contains only a version identity change (versionCode 46 to 47); runtime behavior identical to commit 8bf7d2e which already passed both gates. No regression surface beyond install/update identity, versionCode remains monotonic.",
+      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt:835-850 updateKmOverlay lifecycle on events only",
+      "claim": "Overlay show and hide are driven exclusively by accessibility events; if Picap closes the detail popup without emitting an event (rare), the overlay could linger until the next Picap event or service destroy. Mitigated by WINDOW_STATE_CHANGED firing on popup transitions and by hide hooks in handlePicapEvent and onDestroy.",
       "proof_refs": [
-        "app/build.gradle.kts:18 versionCode = 47",
-        "app/build.gradle.kts:19 versionName = 0.3.32"
+        "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt:850 updateKmOverlay called from processPicapWindow after id validation"
+      ],
+      "causal_disposition": "introduced"
+    },
+    {
+      "id": "rel-2",
+      "lens": "reliability",
+      "severity": "SUGGESTION",
+      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt:870-876 exact contentDescription anchor match",
+      "claim": "findNodeBoundsByContentDescription requires an exact string match against order.ganancia; if Picap ever renders the price with different formatting between the parsed CD and the node CD, the overlay silently hides (safe failure, no crash or misplacement).",
+      "proof_refs": [
+        "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt:870 if (node.contentDescription.toString() == contentDescription)"
+      ],
+      "causal_disposition": "introduced"
+    },
+    {
+      "id": "rel-3",
+      "lens": "reliability",
+      "severity": "SUGGESTION",
+      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt:893-898 overlay permission guard",
+      "claim": "showKmOverlay depends on Settings.canDrawOverlays; if the user revokes the overlay permission the feature degrades to a logged warning without user-visible feedback. Same permission contract already required by the WhatsApp popup, so no new permission surface.",
+      "proof_refs": [
+        "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt:893 if (!Settings.canDrawOverlays(this))"
       ],
       "causal_disposition": "introduced"
     }

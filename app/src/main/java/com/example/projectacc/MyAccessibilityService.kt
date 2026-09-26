@@ -3,8 +3,18 @@ package com.example.projectacc
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.graphics.Color
+import android.graphics.PixelFormat
+import android.graphics.Rect
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.provider.Settings
+import android.view.Gravity
+import android.view.View
+import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
+import android.widget.TextView
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.os.Handler
@@ -21,6 +31,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.log
+import kotlin.math.roundToInt
 
 /**
  * Modelo de datos para representar una orden de Picap capturada.
@@ -123,6 +134,7 @@ class MyAccessibilityService : AccessibilityService() {
     }
 
     override fun onDestroy() {
+        hideKmOverlay()
         serviceScope.cancel()
         floatingPopup?.dismiss()
         floatingPopup = null
@@ -261,7 +273,11 @@ class MyAccessibilityService : AccessibilityService() {
 
     private fun handlePicapEvent(event: AccessibilityEvent) {
         val picapWindows = findAllWindows(PACKAGE_PICAP)
-        if (picapWindows.isEmpty()) return
+        if (picapWindows.isEmpty()) {
+            // Sin ventanas de Picap visibles: el popup de servicio ya no existe
+            hideKmOverlay()
+            return
+        }
 
         // --- MODO AUTO-CLIC EN LISTA ---
         if (OrderStateManager.isAutoClickEnabled.value) {
@@ -314,7 +330,14 @@ class MyAccessibilityService : AccessibilityService() {
         val order = parseOrder(nodesContent)
 
         // Si no hay ID, no es una orden válida
-        if (order.id.isEmpty()) return false
+        if (order.id.isEmpty()) {
+            hideKmOverlay()
+            return false
+        }
+
+        // --- OVERLAY: km totales junto al nodo del precio ---
+        // Se actualiza en cada evento (misma orden o nueva) para refrescar posición/texto.
+        updateKmOverlay(rootNode, order)
 
         // --- AUTO-ACCEPT: Evaluar siempre que haya ID, sin importar si es la misma orden ---
         if (OrderStateManager.isPicapAutoAcceptEnabled.value && shouldAutoAccept(order)) {
@@ -324,6 +347,7 @@ class MyAccessibilityService : AccessibilityService() {
                 if (findAndClickAcceptButton(rootNode)) {
                     lastClickTime = System.currentTimeMillis()
                     Log.i(TAG, "AUTO-ACCEPT: Orden auto-aceptada! No se mostrara en UI.")
+                    hideKmOverlay()
                     return true
                 }
             } else {
@@ -817,6 +841,128 @@ class MyAccessibilityService : AccessibilityService() {
         val kmRec = extractKmFromPickup(tiempoRec).takeIf { it < 999.0 } ?: 0.0
         val kmEnt = extractKmFromPickup(tiempoEnt).takeIf { it < 999.0 } ?: 0.0
         return PicapOrder(id, ganancia, tiempoRec, dirRec, tiempoEnt, dirEnt, servicio, kmRec, kmEnt)
+    }
+
+    // ============================================================
+    // OVERLAY DE KM TOTALES (junto al nodo del precio)
+    // ============================================================
+
+    private var kmOverlayTextView: TextView? = null
+    private var kmOverlayAttached = false
+
+    /**
+     * Busca recursivamente el nodo cuyo contentDescription coincide exacto
+     * y retorna sus coordenadas en pantalla. Null si no existe.
+     */
+    private fun findNodeBoundsByContentDescription(
+        node: AccessibilityNodeInfo?,
+        contentDescription: String
+    ): Rect? {
+        if (node == null) return null
+        if (node.contentDescription?.toString() == contentDescription) {
+            val rect = Rect()
+            node.getBoundsInScreen(rect)
+            if (!rect.isEmpty) return rect
+        }
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i)
+            val found = findNodeBoundsByContentDescription(child, contentDescription)
+            child?.recycle()
+            if (found != null) return found
+        }
+        return null
+    }
+
+    /**
+     * Muestra/actualiza u oculta el overlay de km totales según el estado
+     * de la orden actual y la posición del nodo del precio ("X.XXX COP").
+     */
+    private fun updateKmOverlay(rootNode: AccessibilityNodeInfo, order: PicapOrder) {
+        val totalKm = order.kmRecogida + order.kmEntrega
+        if (totalKm <= 0.0 || order.ganancia.isEmpty()) {
+            hideKmOverlay()
+            return
+        }
+        // El nodo del precio es el mismo del que se extrajo la ganancia
+        val anchor = findNodeBoundsByContentDescription(rootNode, order.ganancia)
+        if (anchor == null) {
+            hideKmOverlay()
+            return
+        }
+        showKmOverlay(anchor, totalKm)
+    }
+
+    private fun showKmOverlay(anchor: Rect, totalKm: Double) {
+        try {
+            if (!Settings.canDrawOverlays(this)) {
+                Log.w(TAG, "KM_OVERLAY: permiso de overlay no concedido; no se muestra")
+                return
+            }
+            val wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+            val density = resources.displayMetrics.density
+            val marginPx = (8 * density).roundToInt()
+
+            val tv = kmOverlayTextView ?: TextView(this).apply {
+                background = GradientDrawable().apply {
+                    cornerRadius = 16f * density
+                    setColor(0xE6121212.toInt())
+                    setStroke((1.5f * density).roundToInt().coerceAtLeast(1), 0xFFA855F7.toInt())
+                }
+                setTextColor(Color.WHITE)
+                textSize = 14f
+                typeface = Typeface.DEFAULT_BOLD
+                setPadding(
+                    (10 * density).roundToInt(),
+                    (6 * density).roundToInt(),
+                    (10 * density).roundToInt(),
+                    (6 * density).roundToInt()
+                )
+                elevation = 6f * density
+                kmOverlayTextView = this
+            }
+            tv.text = "📏 ${String.format("%.1f", totalKm)} km"
+
+            val params = WindowManager.LayoutParams(
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                PixelFormat.TRANSLUCENT
+            ).apply {
+                gravity = Gravity.TOP or Gravity.START
+                x = anchor.right + marginPx
+            }
+
+            // Centrar verticalmente respecto al precio
+            tv.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
+            params.y = (anchor.centerY() - tv.measuredHeight / 2).coerceAtLeast(0)
+
+            if (kmOverlayAttached) {
+                wm.updateViewLayout(tv, params)
+            } else {
+                wm.addView(tv, params)
+                kmOverlayAttached = true
+                Log.d(
+                    TAG,
+                    "KM_OVERLAY: visible total=${String.format("%.1f", totalKm)} km, precio en ${anchor.toShortString()}"
+                )
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "KM_OVERLAY: error mostrando overlay: ${e.message}")
+        }
+    }
+
+    private fun hideKmOverlay() {
+        if (!kmOverlayAttached) return
+        try {
+            val wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+            kmOverlayTextView?.let { wm.removeViewImmediate(it) }
+            Log.d(TAG, "KM_OVERLAY: ocultado")
+        } catch (e: Exception) {
+            Log.w(TAG, "KM_OVERLAY: error al ocultar: ${e.message}")
+        }
+        kmOverlayAttached = false
     }
 
     /**
