@@ -540,42 +540,45 @@ fun PicapContent(
             }
         }
 
-        Divider(modifier = Modifier.padding(vertical = 8.dp))
+        // Auto-aceptar por distancia: solo visible cuando el auto-aceptar maestro está activo
+        if (isPicapAutoAcceptEnabled) {
+            Divider(modifier = Modifier.padding(vertical = 8.dp))
 
-        // Switch de Auto-Aceptar por distancia
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Auto-Aceptar por distancia",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = if (isAutoAcceptByKmEnabled) {
-                        if (autoAcceptMaxKm >= 5.0) "Cualquier distancia (Sin limite)"
-                        else "Aceptar si esta a menos de ${String.format("%.1f", autoAcceptMaxKm)} km"
-                    } else "Desactivado",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+            // Switch de Auto-Aceptar por distancia
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Auto-Aceptar por distancia",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = if (isAutoAcceptByKmEnabled) {
+                            if (autoAcceptMaxKm >= 5.0) "Cualquier distancia (Sin limite)"
+                            else "Aceptar si esta a menos de ${String.format("%.1f", autoAcceptMaxKm)} km"
+                        } else "Desactivado",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = isAutoAcceptByKmEnabled,
+                    onCheckedChange = { OrderStateManager.setAutoAcceptByKmEnabled(it) }
                 )
             }
-            Switch(
-                checked = isAutoAcceptByKmEnabled,
-                onCheckedChange = { OrderStateManager.setAutoAcceptByKmEnabled(it) }
-            )
-        }
 
-        if (isAutoAcceptByKmEnabled) {
-            Slider(
-                value = autoAcceptMaxKm.toFloat(),
-                onValueChange = { OrderStateManager.setAutoAcceptMaxKm(it.toDouble()) },
-                valueRange = 0.5f..5.0f,
-                steps = 8,
-                modifier = Modifier.fillMaxWidth()
-            )
+            if (isAutoAcceptByKmEnabled) {
+                Slider(
+                    value = autoAcceptMaxKm.toFloat(),
+                    onValueChange = { OrderStateManager.setAutoAcceptMaxKm(it.toDouble()) },
+                    valueRange = 0.5f..5.0f,
+                    steps = 8,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(8.dp))

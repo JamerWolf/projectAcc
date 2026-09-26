@@ -1,7 +1,7 @@
-Verification evidence for release 0.3.31 (branch downgrade/v0.3.28):
+Verification evidence for nesting distance auto-accept UI under the master switch (branch downgrade/v0.3.28):
 
-1. Build: .\gradlew.bat assembleDebug -> BUILD SUCCESSFUL (35 tasks) with versionCode 46 / versionName 0.3.31. Only pre-existing deprecation warnings (TabRow/Divider).
-2. Diff scope: app/build.gradle.kts version bump only (feature code already committed as c197906 under review lineage review-3597e5c37f8a4d1f with pre-commit and pre-push allow) + .gentle-review artifact updates.
-3. APK artifact: app\build\outputs\apk\debug\app-debug.apk rebuilt from versionCode 46 tree.
-4. Feature context for release notes: picap auto-accept service type selector (OMS/Mostrador/Todos) gated at the top of shouldAutoAccept, covering all three accept conditions including distance-based accept; WhatsApp path untouched.
-5. No automated unit test suite exists; verification is compile + package success plus the reliability lens review (0 BLOCKER/CRITICAL, 1 SUGGESTION).
+1. Build: .\gradlew.bat assembleDebug -> BUILD SUCCESSFUL (35 tasks) after MainActivity.kt edit. Only pre-existing deprecation warnings (TabRow/Divider); no new errors.
+2. Diff scope: app/src/main/java/com/example/projectacc/MainActivity.kt (distance section wrapped in if (isPicapAutoAcceptEnabled)) + .gentle-review artifact updates. No changes to MyAccessibilityService.kt or OrderStateManager.kt in this diff.
+3. Behavioral checks: runtime gating at MyAccessibilityService.kt:320 (isPicapAutoAcceptEnabled && shouldAutoAccept) predates this change and already made condition 3 inert when the master switch is off; this diff is presentation-only (visibility), slider/switch state persistence untouched via OrderStateManager.setAutoAcceptByKmEnabled/setAutoAcceptMaxKm.
+4. Layout check: with master off, tab shows master switch then Spacer then order card; the divider previously above the distance section moved inside the conditional so no orphan divider remains.
+5. No automated unit test suite exists for these modules; verification is compile + package success plus the reliability lens review (0 BLOCKER/CRITICAL, 1 SUGGESTION).
