@@ -1,12 +1,7 @@
-Verification evidence for Picap auto-accept service-type filter (branch downgrade/v0.3.28, version 0.3.30):
+Verification evidence for release 0.3.31 (branch downgrade/v0.3.28):
 
-1. Build: .\gradlew.bat assembleDebug -> BUILD SUCCESSFUL (35 tasks) after edits to OrderStateManager.kt, MyAccessibilityService.kt, MainActivity.kt. Only pre-existing deprecation warnings (TabRow/Divider); no new warnings or errors.
-2. Diff scope: 3 tracked source files + .gentle-review review artifacts (tracked since 0f4dfef).
-3. Behavioral checks:
-   - Filter gate runs FIRST in shouldAutoAccept, before ganancia/km conditions; excluded orders log and return false without side effects.
-   - shouldAutoAccept has exactly one call site (MyAccessibilityService.kt:320), gated by isPicapAutoAcceptEnabled -> filter is Picap-only.
-   - WhatsApp auto-accept (whatsapp* settings, NotificationInterceptorService) has no reference to picapAutoAcceptFilter -> unchanged.
-   - Filter default "TODOS" preserves previous behavior for existing installs and new users.
-   - Filter persisted via SharedPreferences key picap_auto_accept_filter and reloaded in loadAll().
-   - UI: SingleChoiceSegmentedButtonRow with OMS / Mostrador / Todos, rendered under the Auto-Aceptar switch only when enabled; SegmentedButton is stable in material3 (BOM 2026.02.01), no OptIn required.
-4. No automated unit test suite exists for these modules; verification is compile + package success plus the reliability lens review (0 BLOCKER/CRITICAL, 3 SUGGESTIONs).
+1. Build: .\gradlew.bat assembleDebug -> BUILD SUCCESSFUL (35 tasks) with versionCode 46 / versionName 0.3.31. Only pre-existing deprecation warnings (TabRow/Divider).
+2. Diff scope: app/build.gradle.kts version bump only (feature code already committed as c197906 under review lineage review-3597e5c37f8a4d1f with pre-commit and pre-push allow) + .gentle-review artifact updates.
+3. APK artifact: app\build\outputs\apk\debug\app-debug.apk rebuilt from versionCode 46 tree.
+4. Feature context for release notes: picap auto-accept service type selector (OMS/Mostrador/Todos) gated at the top of shouldAutoAccept, covering all three accept conditions including distance-based accept; WhatsApp path untouched.
+5. No automated unit test suite exists; verification is compile + package success plus the reliability lens review (0 BLOCKER/CRITICAL, 1 SUGGESTION).

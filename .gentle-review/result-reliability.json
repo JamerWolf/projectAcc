@@ -1,42 +1,19 @@
 {
     "lens":  "reliability",
     "evidence":  [
-                     "Reviewed staged diff (3 tracked files): picap auto-accept service-type filter (OMS/Mostrador/Todos) added to OrderStateManager, shouldAutoAccept gate, and segmented selector in the Picap tab",
-                     "Traced the only Picap auto-accept entry point (MyAccessibilityService.kt:320 isPicapAutoAcceptEnabled \u0026\u0026 shouldAutoAccept) and confirmed the WhatsApp auto-accept path (NotificationInterceptorService / whatsapp* settings) is untouched"
+                     "Reviewed staged diff of app/build.gradle.kts:18-19 (versionCode 45 to 46, versionName 0.3.30 to 0.3.31) plus .gentle-review artifact updates; feature code unchanged from commit c197906",
+                     "Confirmed no source or behavior changes in this diff; the feature content (picap auto-accept service type selector) was reviewed and shipped in commit c197906 under lineage review-3597e5c37f8a4d1f"
                  ],
     "findings":  [
                      {
                          "id":  "rel-1",
                          "lens":  "reliability",
                          "severity":  "SUGGESTION",
-                         "location":  "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt:916-926 filter classification by servicio substring",
-                         "claim":  "Classification relies solely on servicio containing the substring \u0027Mostrador\u0027; empty or reworded servicio strings classify as OMS, so a MOSTRADOR filter would silently auto-accept nothing if Picap renames the field content. Mirrors the existing card-title fallback, but there is no log when zero orders match a filter.",
+                         "location":  "app/build.gradle.kts:18-19 version bump for release 0.3.31",
+                         "claim":  "The release diff contains only a version identity change; runtime behavior is identical to commit c197906 which already passed pre-commit and pre-push gates. No regression surface beyond install/update identity (versionCode monotonic 45-\u003e46).",
                          "proof_refs":  [
-                                            "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt:918 val isMostrador = order.servicio.contains(\"Mostrador\", ignoreCase = true)",
-                                            "app/src/main/java/com/example/projectacc/OrderCard.kt:77 card title uses the same contains(\"Mostrador\") fallback to OMS"
-                                        ],
-                         "causal_disposition":  "introduced"
-                     },
-                     {
-                         "id":  "rel-2",
-                         "lens":  "reliability",
-                         "severity":  "SUGGESTION",
-                         "location":  "app/src/main/java/com/example/projectacc/OrderStateManager.kt:336-345 filter values are free-form strings",
-                         "claim":  "picapAutoAcceptFilter persists an unvalidated string from SharedPreferences; a corrupted or legacy value (e.g. lowercase \u0027oms\u0027) silently disables the filter branch and behaves as TODOS. Acceptable default-on-failure behavior, but an enum or whitelist normalization on load would make it explicit.",
-                         "proof_refs":  [
-                                            "app/src/main/java/com/example/projectacc/OrderStateManager.kt:338 _picapAutoAcceptFilter.value = MutableStateFlow(\"TODOS\")",
-                                            "app/src/main/java/com/example/projectacc/OrderStateManager.kt:65 loadAll reads the pref without validating against OMS/MOSTRADOR/TODOS"
-                                        ],
-                         "causal_disposition":  "introduced"
-                     },
-                     {
-                         "id":  "rel-3",
-                         "lens":  "reliability",
-                         "severity":  "SUGGESTION",
-                         "location":  "app/src/main/java/com/example/projectacc/MainActivity.kt:513-541 segmented selector visibility",
-                         "claim":  "The selector only renders while isPicapAutoAcceptEnabled is true, so the configured filter is invisible when auto-accept is off; a user cannot verify the pending filter without toggling the switch. Intentional to mirror the km-slider pattern, noted for UX awareness.",
-                         "proof_refs":  [
-                                            "app/src/main/java/com/example/projectacc/MainActivity.kt:513 selector rendered only while isPicapAutoAcceptEnabled is true"
+                                            "app/build.gradle.kts:18 versionCode = 46",
+                                            "app/build.gradle.kts:19 versionName = 0.3.31"
                                         ],
                          "causal_disposition":  "introduced"
                      }
