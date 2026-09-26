@@ -37,6 +37,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
@@ -401,6 +404,7 @@ fun PicapContent(
     val autoAcceptMaxKm by OrderStateManager.autoAcceptMaxKm.collectAsState()
     val isAutoAcceptByKmEnabled by OrderStateManager.isAutoAcceptByKmEnabled.collectAsState()
     val isPicapAutoAcceptEnabled by OrderStateManager.isPicapAutoAcceptEnabled.collectAsState()
+    val picapAutoAcceptFilter by OrderStateManager.picapAutoAcceptFilter.collectAsState()
 
     Column(
         modifier = Modifier
@@ -500,6 +504,40 @@ fun PicapContent(
                 checked = isPicapAutoAcceptEnabled,
                 onCheckedChange = { OrderStateManager.setPicapAutoAcceptEnabled(it) }
             )
+        }
+
+        // Selector de tipo de pedido a auto-aceptar (solo afecta Picap)
+        if (isPicapAutoAcceptEnabled) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Tipo de pedido a auto-aceptar",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                SegmentedButton(
+                    selected = picapAutoAcceptFilter == "OMS",
+                    onClick = { OrderStateManager.setPicapAutoAcceptFilter("OMS") },
+                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3)
+                ) {
+                    Text(text = "OMS")
+                }
+                SegmentedButton(
+                    selected = picapAutoAcceptFilter == "MOSTRADOR",
+                    onClick = { OrderStateManager.setPicapAutoAcceptFilter("MOSTRADOR") },
+                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3)
+                ) {
+                    Text(text = "Mostrador")
+                }
+                SegmentedButton(
+                    selected = picapAutoAcceptFilter == "TODOS",
+                    onClick = { OrderStateManager.setPicapAutoAcceptFilter("TODOS") },
+                    shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3)
+                ) {
+                    Text(text = "Todos")
+                }
+            }
         }
 
         Divider(modifier = Modifier.padding(vertical = 8.dp))

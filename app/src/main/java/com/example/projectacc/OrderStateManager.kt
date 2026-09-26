@@ -32,6 +32,7 @@ object OrderStateManager {
     private const val KEY_WHATSAPP_AUTO_ACCEPT_DELAY_ENABLED = "whatsapp_auto_accept_delay_enabled"
     private const val KEY_WHATSAPP_AUTO_ACCEPT_DELAY_MS = "whatsapp_auto_accept_delay_ms"
     private const val KEY_PICAP_AUTO_ACCEPT_ENABLED = "picap_auto_accept_enabled"
+    private const val KEY_PICAP_AUTO_ACCEPT_FILTER = "picap_auto_accept_filter"
     private const val KEY_PLATE_REQUEST_PHRASES = "plate_request_phrases"
     private const val KEY_ALLOWED_PLATE_SENDERS = "allowed_plate_senders"
 
@@ -62,6 +63,7 @@ object OrderStateManager {
         _isWhatsAppAutoAcceptDelayEnabled.value = p.getBoolean(KEY_WHATSAPP_AUTO_ACCEPT_DELAY_ENABLED, false)
         _whatsappAutoAcceptDelayMs.value = p.getLong(KEY_WHATSAPP_AUTO_ACCEPT_DELAY_MS, 0L)
         _isPicapAutoAcceptEnabled.value = p.getBoolean(KEY_PICAP_AUTO_ACCEPT_ENABLED, false)
+        _picapAutoAcceptFilter.value = p.getString(KEY_PICAP_AUTO_ACCEPT_FILTER, "TODOS") ?: "TODOS"
         _plateRequestPhrases.value = loadStringList(KEY_PLATE_REQUEST_PHRASES, listOf("envíame la placa de tu vehículo", "enviame la placa de tu vehiculo"))
         _allowedPlateSenders.value = loadStringList(KEY_ALLOWED_PLATE_SENDERS, listOf("+57 350 7867814", "Te St", "+57 316 6904939"))
     }
@@ -328,6 +330,16 @@ object OrderStateManager {
     fun setPicapAutoAcceptEnabled(enabled: Boolean) {
         _isPicapAutoAcceptEnabled.value = enabled
         prefs?.edit()?.putBoolean(KEY_PICAP_AUTO_ACCEPT_ENABLED, enabled)?.apply()
+    }
+
+    // Filtro de tipo de pedido a auto-aceptar (selector en la pestaña Picap)
+    // Valores: "OMS" | "MOSTRADOR" | "TODOS"
+    private val _picapAutoAcceptFilter = MutableStateFlow("TODOS")
+    val picapAutoAcceptFilter: StateFlow<String> = _picapAutoAcceptFilter.asStateFlow()
+
+    fun setPicapAutoAcceptFilter(filter: String) {
+        _picapAutoAcceptFilter.value = filter
+        prefs?.edit()?.putString(KEY_PICAP_AUTO_ACCEPT_FILTER, filter)?.apply()
     }
 
     // Plate request phrases (exact phrases that trigger auto-plate sending)

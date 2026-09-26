@@ -1,19 +1,19 @@
 {
     "lens":  "reliability",
     "evidence":  [
-                     "Reviewed staged diff (3 tracked files) plus workspace scope for review-500ffbc8e95a5fe2: PicapOrder km fields, parseOrder km extraction, OrderCard total km line, version bump 0.3.30",
-                     "Traced extractKmFromPickup sentinel semantics (999.0 = not found), its existing use in shouldAutoAccept, and all PicapOrder construction sites (single constructor call in parseOrder at MyAccessibilityService.kt:815-823)"
+                     "Reviewed staged diff (3 tracked files): picap auto-accept service-type filter (OMS/Mostrador/Todos) added to OrderStateManager, shouldAutoAccept gate, and segmented selector in the Picap tab",
+                     "Traced the only Picap auto-accept entry point (MyAccessibilityService.kt:320 isPicapAutoAcceptEnabled \u0026\u0026 shouldAutoAccept) and confirmed the WhatsApp auto-accept path (NotificationInterceptorService / whatsapp* settings) is untouched"
                  ],
     "findings":  [
                      {
                          "id":  "rel-1",
                          "lens":  "reliability",
                          "severity":  "SUGGESTION",
-                         "location":  "app/src/main/java/com/example/projectacc/OrderCard.kt:88-95 total km display",
-                         "claim":  "When only one of the two legs carries a parsed km value, the single-leg distance is still labeled \u0027X km total\u0027, which can understate the real total if Picap omits distance in one leg\u0027s time string. Consider labeling with the sum plus per-leg values, or hiding the line when only one leg is known.",
+                         "location":  "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt:916-926 filter classification by servicio substring",
+                         "claim":  "Classification relies solely on servicio containing the substring \u0027Mostrador\u0027; empty or reworded servicio strings classify as OMS, so a MOSTRADOR filter would silently auto-accept nothing if Picap renames the field content. Mirrors the existing card-title fallback, but there is no log when zero orders match a filter.",
                          "proof_refs":  [
-                                            "app/src/main/java/com/example/projectacc/OrderCard.kt:88 val totalKm = order.kmRecogida + order.kmEntrega",
-                                            "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt:818-820 kmRec/kmEnt default to 0.0 when sentinel 999.0 filtered"
+                                            "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt:918 val isMostrador = order.servicio.contains(\"Mostrador\", ignoreCase = true)",
+                                            "app/src/main/java/com/example/projectacc/OrderCard.kt:77 card title uses the same contains(\"Mostrador\") fallback to OMS"
                                         ],
                          "causal_disposition":  "introduced"
                      },
@@ -21,11 +21,11 @@
                          "id":  "rel-2",
                          "lens":  "reliability",
                          "severity":  "SUGGESTION",
-                         "location":  "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt:793-794 delivery capture pattern",
-                         "claim":  "Delivery km extraction depends on tiempoEnt matching \u0027min (\u0027 or \u0027mins (\u0027 with a parenthesized distance; a future Picap format without the parenthesized distance silently yields kmEnt=0.0 and a reduced total with no log signal.",
+                         "location":  "app/src/main/java/com/example/projectacc/OrderStateManager.kt:336-345 filter values are free-form strings",
+                         "claim":  "picapAutoAcceptFilter persists an unvalidated string from SharedPreferences; a corrupted or legacy value (e.g. lowercase \u0027oms\u0027) silently disables the filter branch and behaves as TODOS. Acceptable default-on-failure behavior, but an enum or whitelist normalization on load would make it explicit.",
                          "proof_refs":  [
-                                            "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt:794 if ((current.contains(\"min (\") || current.contains(\"mins (\")) \u0026\u0026 !current.startsWith(\"A \"))",
-                                            "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt:891-899 extractKmFromPickup returns 999.0 sentinel when regex does not match"
+                                            "app/src/main/java/com/example/projectacc/OrderStateManager.kt:338 _picapAutoAcceptFilter.value = MutableStateFlow(\"TODOS\")",
+                                            "app/src/main/java/com/example/projectacc/OrderStateManager.kt:65 loadAll reads the pref without validating against OMS/MOSTRADOR/TODOS"
                                         ],
                          "causal_disposition":  "introduced"
                      },
@@ -33,10 +33,10 @@
                          "id":  "rel-3",
                          "lens":  "reliability",
                          "severity":  "SUGGESTION",
-                         "location":  "app/src/main/java/com/example/projectacc/OrderCard.kt:91 String.format default locale",
-                         "claim":  "String.format(\"%.1f\", totalKm) without an explicit Locale renders a decimal comma under es_CO/es_ES device locales (\u00277,7 km\u0027) while the rest of the app mixes both conventions; cosmetic inconsistency only.",
+                         "location":  "app/src/main/java/com/example/projectacc/MainActivity.kt:513-541 segmented selector visibility",
+                         "claim":  "The selector only renders while isPicapAutoAcceptEnabled is true, so the configured filter is invisible when auto-accept is off; a user cannot verify the pending filter without toggling the switch. Intentional to mirror the km-slider pattern, noted for UX awareness.",
                          "proof_refs":  [
-                                            "app/src/main/java/com/example/projectacc/OrderCard.kt:91 total km text uses String.format without explicit Locale"
+                                            "app/src/main/java/com/example/projectacc/MainActivity.kt:513 selector rendered only while isPicapAutoAcceptEnabled is true"
                                         ],
                          "causal_disposition":  "introduced"
                      }

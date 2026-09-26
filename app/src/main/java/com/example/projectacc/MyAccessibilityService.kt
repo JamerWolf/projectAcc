@@ -911,6 +911,18 @@ class MyAccessibilityService : AccessibilityService() {
      * 3. Si km <= umbral seleccionado por el usuario → ACEPTAR (sin importar precio)
      */
     private fun shouldAutoAccept(order: PicapOrder): Boolean {
+        // Filtro de tipo de pedido (selector en la pestaña Picap): OMS / Mostrador / Todos.
+        // Si el filtro excluye este tipo, no se auto-acepta sin importar ganancia ni km.
+        val serviceFilter = OrderStateManager.picapAutoAcceptFilter.value
+        val isMostrador = order.servicio.contains("Mostrador", ignoreCase = true)
+        if ((serviceFilter == "MOSTRADOR" && !isMostrador) || (serviceFilter == "OMS" && isMostrador)) {
+            Log.d(
+                TAG,
+                "AUTO-ACCEPT: Filtro $serviceFilter excluye servicio '${order.servicio}'. No aceptando."
+            )
+            return false
+        }
+
         val gananciaNum = order.ganancia
             .replace("COP", "")
             .replace(" ", "")
