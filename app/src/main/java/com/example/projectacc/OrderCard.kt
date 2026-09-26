@@ -80,8 +80,9 @@ private fun PicapOrderCard(order: PicapOrder, onDismiss: () -> Unit) {
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             // Source indicator + Title
+            val shortTitle = if (order.servicio.contains("Mostrador", ignoreCase = true)) "Mostrador" else "OMS"
             Text(
-                text = "\uD83D\uDE97 Orden #${order.id}",
+                text = "\uD83D\uDE97 $shortTitle #${order.id}",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface

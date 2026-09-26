@@ -31,7 +31,8 @@ data class PicapOrder(
     val tiempoRecogida: String = "",
     val direccionRecogida: String = "",
     val tiempoEntrega: String = "",
-    val direccionEntrega: String = ""
+    val direccionEntrega: String = "",
+    val servicio: String = ""
 )
 
 @Suppress("DEPRECATION")
@@ -804,7 +805,12 @@ class MyAccessibilityService : AccessibilityService() {
                 }
             }
         }
-        return PicapOrder(id, ganancia, tiempoRec, dirRec, tiempoEnt, dirEnt)
+        // Servicio: texto aislado con el nombre (ej. "Cruz verde Mostrador").
+        // Se excluyen las direcciones para evitar falsos positivos.
+        val servicio = texts.firstOrNull {
+            it.contains("cruz verde", ignoreCase = true) && it != dirRec && it != dirEnt
+        } ?: ""
+        return PicapOrder(id, ganancia, tiempoRec, dirRec, tiempoEnt, dirEnt, servicio)
     }
 
     /**

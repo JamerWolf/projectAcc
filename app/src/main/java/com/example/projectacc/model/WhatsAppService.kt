@@ -101,6 +101,27 @@ data class WhatsAppService(
         }
     }
 
+    /**
+     * Extracts the cash payment amount (pago en efectivo) from cobros or requisitos.
+     * Returns the numeric value or null if not found / not cash.
+     */
+    private fun extractCashAmount(): Int? {
+        // Ruta format: check formasDePago for an "efectivo" cobro
+        if (formasDePago.isNotEmpty()) {
+            val cashCobro = formasDePago.find { it.medioDePago.lowercase().contains("efectivo") }
+            if (cashCobro != null) return cashCobro.valor
+            return null
+        }
+
+        // Regular format: check "Medio de pago" + "valor a cobrar" in requisitos
+        val lowerRequisitos = requisitos.lowercase()
+        val isEfectivo = lowerRequisitos.contains("efectivo")
+        if (!isEfectivo) return null
+
+        val cobrarMatch = Regex("valor a cobrar es:\\s*([\\d.]+)", RegexOption.IGNORE_CASE).find(requisitos)
+        return cobrarMatch?.groupValues?.get(1)?.replace(".", "")?.toIntOrNull()
+    }
+
     fun needsReturnIcon(): Boolean {
         val lowerPago = pago.lowercase()
         val lowerRequisitos = requisitos.lowercase()
@@ -118,8 +139,9 @@ data class WhatsAppService(
         if (lowerRequisitos.contains("refrigerado")) return true
         if (lowerRequisitos.contains("devolver")) return true
 
-        val valor = extractValor() ?: 0
-        if (valor > 150000) return true
+        // Return icon when cash payment > $150.000
+        val cashAmount = extractCashAmount() ?: 0
+        if (cashAmount > 150000) return true
 
         return false
     }
