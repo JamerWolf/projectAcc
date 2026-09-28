@@ -1,19 +1,18 @@
 {
   "lens": "reliability",
   "evidence": [
-    "Reviewed staged diff in app/src/main/java/com/example/projectacc/MyAccessibilityService.kt showKmOverlay (FLAG_LAYOUT_IN_SCREEN added to the overlay window flags at line 931, diagnostic log enriched at line 951), app/build.gradle.kts version bump lines 18-19, and .gentle-review artifact updates",
-    "Screenshot evidence from the user shows the km pill rendering about one text line below the anchored price node while the horizontal offset matches anchor.right, the signature of a vertical coordinate-space mismatch between getBoundsInScreen screen coordinates and an overlay window origin placed below the status bar"
+    "Reviewed staged diff across MyAccessibilityService.kt (PicapOrder timestamp field line 50, isTrasladoDeliveryOk line 1145, filter gate rewrite, addOrder hooks), MainActivity.kt (4-segment selector, pager carousel line 607), OrderCard.kt (formatOrderTime line 61 plus title row time display), new OrderHistoryManager.kt (addOrder line 47, removeById line 58), OrderCard.kt time formatting, and build.gradle.kts version bump to 0.3.35",
+    "aapt dump badging reports com.example.projectacc versionCode 50 versionName 0.3.35; compileDebugKotlin succeeded with only pre-existing deprecation warnings (TabRow, Divider)"
   ],
   "findings": [
     {
       "id": "rel-1",
       "lens": "reliability",
       "severity": "SUGGESTION",
-      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt:931 FLAG_LAYOUT_IN_SCREEN coordinate-space fix not yet device-verified",
-      "claim": "The status-bar inset is the inferred root cause of the reported vertical offset; FLAG_LAYOUT_IN_SCREEN should align the overlay origin with getBoundsInScreen coordinates, but this remains a hypothesis until the user confirms on device. The enriched log at line 951 emits computed y, measured height, status bar height, and anchor rect, so a residual mismatch is diagnosable from one logcat line.",
+      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt:1145 isTrasladoDeliveryOk does not verify the service type",
+      "claim": "The TRASLADO filter gate checks only the delivery address (Cruz Verde contains or SavedLocationManager match) and never the servicio field, by explicit product decision because Picap renders every Traslado as Mostrador. Consequence: an OMS order whose delivery address matches a saved location would also be accepted while the Traslado filter is active. The user accepted this trade-off when specifying the rule.",
       "proof_refs": [
-        "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt:931 FLAG_LAYOUT_IN_SCREEN added to window flags",
-        "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt:951 KM_OVERLAY diagnostic log with y, height, status bar, anchor rect"
+        "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt:1145 isTrasladoDeliveryOk checks direccionEntrega only"
       ],
       "causal_disposition": "introduced"
     },
@@ -21,13 +20,35 @@
       "id": "rel-2",
       "lens": "reliability",
       "severity": "SUGGESTION",
-      "location": "app/build.gradle.kts:18-19 versionCode and versionName maintained manually",
-      "claim": "versionCode and versionName are bumped by hand on every release; forgetting versionCode while bumping versionName would silently keep the old code and block package updates. The chore-release convention plus aapt verification mitigates but does not remove the regression risk.",
+      "location": "app/src/main/java/com/example/projectacc/OrderHistoryManager.kt:47 addOrder deduplicates by id and never refreshes",
+      "claim": "If Picap re-parses the same order id with updated fields (for example a changed ganancia), addOrder skips it and the carousel keeps the first-seen snapshot, while the live card shows the updated values via setOrder. Divergence is limited to display; auto-accept always evaluates the fresh parse.",
       "proof_refs": [
-        "app/build.gradle.kts:18 versionCode = 49",
-        "app/build.gradle.kts:19 versionName = 0.3.34"
+        "app/src/main/java/com/example/projectacc/OrderHistoryManager.kt:47 addOrder returns early when the id already exists"
       ],
-      "causal_disposition": "pre-existing"
+      "causal_disposition": "introduced"
+    },
+    {
+      "id": "rel-3",
+      "lens": "reliability",
+      "severity": "SUGGESTION",
+      "location": "app/src/main/java/com/example/projectacc/OrderHistoryManager.kt:47 unbounded history rewritten as one JSON blob per capture",
+      "claim": "History is intentionally unbounded until app data is cleared; every new order rewrites the full JSON array on the main thread. With thousands of stored orders this adds a periodic hitch at capture time. Acceptable at realistic volumes per the maintainer decision, but a size cap or background write would remove the risk if the list grows very large.",
+      "proof_refs": [
+        "app/src/main/java/com/example/projectacc/OrderHistoryManager.kt:47 persist rewrites the full list on each add"
+      ],
+      "causal_disposition": "introduced"
+    },
+    {
+      "id": "rel-4",
+      "lens": "reliability",
+      "severity": "SUGGESTION",
+      "location": "app/src/main/java/com/example/projectacc/MainActivity.kt:607 pager snaps to newest whenever history grows",
+      "claim": "The LaunchedEffect jumps to the newest page on every history insertion, so a user browsing older orders is moved back to the newest when a new order arrives. This favors live-order visibility over browsing position and was a deliberate choice; deleting pages does not trigger the jump and clamps to the last valid index instead.",
+      "proof_refs": [
+        "app/src/main/java/com/example/projectacc/MainActivity.kt:607 rememberPagerState initialPage history.lastIndex",
+        "app/src/main/java/com/example/projectacc/MainActivity.kt:610 LaunchedEffect animates to newest only when history grew"
+      ],
+      "causal_disposition": "introduced"
     }
   ]
 }

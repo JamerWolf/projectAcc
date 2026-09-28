@@ -22,6 +22,7 @@ import android.os.Looper
 import android.util.Log
 import android.view.accessibility.AccessibilityNodeInfo
 import com.example.projectacc.floating.FloatingPopupManager
+import com.example.projectacc.location.SavedLocationManager
 import com.example.projectacc.model.WhatsAppService
 import com.example.projectacc.parser.WhatsAppParser
 import kotlinx.coroutines.CoroutineScope
@@ -45,7 +46,8 @@ data class PicapOrder(
     val direccionEntrega: String = "",
     val servicio: String = "",
     val kmRecogida: Double = 0.0,
-    val kmEntrega: Double = 0.0
+    val kmEntrega: Double = 0.0,
+    val timestamp: Long = 0L
 )
 
 @Suppress("DEPRECATION")
@@ -347,6 +349,7 @@ class MyAccessibilityService : AccessibilityService() {
                 if (findAndClickAcceptButton(rootNode)) {
                     lastClickTime = System.currentTimeMillis()
                     Log.i(TAG, "AUTO-ACCEPT: Orden auto-aceptada! No se mostrara en UI.")
+                    OrderHistoryManager.addOrder(order, this)
                     hideKmOverlay()
                     return true
                 }
@@ -359,6 +362,7 @@ class MyAccessibilityService : AccessibilityService() {
         if (order.id != lastOrder?.id) {
             lastOrder = order
             OrderStateManager.setOrder(order)
+            OrderHistoryManager.addOrder(order, this)
 
             val summary = """
                 
@@ -840,7 +844,7 @@ class MyAccessibilityService : AccessibilityService() {
         // extractKmFromPickup devuelve 999.0 como centinela de "no encontrado".
         val kmRec = extractKmFromPickup(tiempoRec).takeIf { it < 999.0 } ?: 0.0
         val kmEnt = extractKmFromPickup(tiempoEnt).takeIf { it < 999.0 } ?: 0.0
-        return PicapOrder(id, ganancia, tiempoRec, dirRec, tiempoEnt, dirEnt, servicio, kmRec, kmEnt)
+        return PicapOrder(id, ganancia, tiempoRec, dirRec, tiempoEnt, dirEnt, servicio, kmRec, kmEnt, System.currentTimeMillis())
     }
 
     // ============================================================
@@ -1060,16 +1064,28 @@ class MyAccessibilityService : AccessibilityService() {
      * 3. Si km <= umbral seleccionado por el usuario → ACEPTAR (sin importar precio)
      */
     private fun shouldAutoAccept(order: PicapOrder): Boolean {
-        // Filtro de tipo de pedido (selector en la pestaña Picap): OMS / Mostrador / Todos.
-        // Si el filtro excluye este tipo, no se auto-acepta sin importar ganancia ni km.
+        // Filtro de tipo de pedido (selector en la pestaña Picap): OMS / Mostrador / Traslado / Todos.
+        // Traslado (Picap lo muestra como Mostrador) solo pasa si la ENTREGA es Cruz Verde
+        // o una dirección guardada; TODOS acepta todo sin mirar dirección.
         val serviceFilter = OrderStateManager.picapAutoAcceptFilter.value
         val isMostrador = order.servicio.contains("Mostrador", ignoreCase = true)
-        if ((serviceFilter == "MOSTRADOR" && !isMostrador) || (serviceFilter == "OMS" && isMostrador)) {
-            Log.d(
-                TAG,
-                "AUTO-ACCEPT: Filtro $serviceFilter excluye servicio '${order.servicio}'. No aceptando."
-            )
-            return false
+        when (serviceFilter) {
+            "OMS" -> if (isMostrador) {
+                Log.d(TAG, "AUTO-ACCEPT: Filtro OMS excluye servicio '${order.servicio}'. No aceptando.")
+                return false
+            }
+            "MOSTRADOR" -> if (!isMostrador) {
+                Log.d(TAG, "AUTO-ACCEPT: Filtro Mostrador excluye servicio '${order.servicio}'. No aceptando.")
+                return false
+            }
+            "TRASLADO" -> if (!isTrasladoDeliveryOk(order)) {
+                Log.d(
+                    TAG,
+                    "AUTO-ACCEPT: Filtro Traslado - entrega '${order.direccionEntrega}' no es Cruz Verde ni direccion guardada. No aceptando."
+                )
+                return false
+            }
+            // "TODOS" u otro valor: acepta OMS, Mostrador y Traslado sin filtrar direccion
         }
 
         val gananciaNum = order.ganancia
@@ -1117,6 +1133,25 @@ class MyAccessibilityService : AccessibilityService() {
             TAG,
             "AUTO-ACCEPT: No cumple ninguna condición (Ganancia: $gananciaNum, Km: $kmRecogida, Umbral: $autoAcceptKm)"
         )
+        return false
+    }
+
+    /**
+     * Condición de dirección para el filtro Traslado: la dirección de ENTREGA debe
+     * contener "cruz verde" o coincidir con una dirección guardada (SavedLocationManager).
+     * La recogida NO se verifica (siempre es Cruz Verde en Traslado).
+     * Las condiciones de ganancia/km se evalúan después, aparte.
+     */
+    private fun isTrasladoDeliveryOk(order: PicapOrder): Boolean {
+        if (order.direccionEntrega.contains("cruz verde", ignoreCase = true)) {
+            Log.d(TAG, "AUTO-ACCEPT: Traslado - entrega contiene 'cruz verde'. Direccion OK.")
+            return true
+        }
+        val match = SavedLocationManager.findMatch(order.direccionEntrega, this)
+        if (match != null) {
+            Log.d(TAG, "AUTO-ACCEPT: Traslado - entrega coincide con direccion guardada '${match.name}'.")
+            return true
+        }
         return false
     }
 

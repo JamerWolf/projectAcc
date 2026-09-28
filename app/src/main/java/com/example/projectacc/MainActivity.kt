@@ -19,6 +19,7 @@ import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -26,6 +27,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
@@ -47,6 +50,7 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -55,6 +59,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -76,6 +81,9 @@ class MainActivity : ComponentActivity() {
 
         // Initialize OrderStateManager with SharedPreferences
         OrderStateManager.init(this)
+
+        // Initialize Picap order history (carrusel de pedidos)
+        OrderHistoryManager.init(this)
 
         // Request POST_NOTIFICATIONS permission (Android 13+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -405,6 +413,8 @@ fun PicapContent(
     val isAutoAcceptByKmEnabled by OrderStateManager.isAutoAcceptByKmEnabled.collectAsState()
     val isPicapAutoAcceptEnabled by OrderStateManager.isPicapAutoAcceptEnabled.collectAsState()
     val picapAutoAcceptFilter by OrderStateManager.picapAutoAcceptFilter.collectAsState()
+    val history by OrderHistoryManager.history.collectAsState()
+    val context = LocalContext.current
 
     Column(
         modifier = Modifier
@@ -519,21 +529,28 @@ fun PicapContent(
                 SegmentedButton(
                     selected = picapAutoAcceptFilter == "OMS",
                     onClick = { OrderStateManager.setPicapAutoAcceptFilter("OMS") },
-                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3)
+                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 4)
                 ) {
                     Text(text = "OMS")
                 }
                 SegmentedButton(
                     selected = picapAutoAcceptFilter == "MOSTRADOR",
                     onClick = { OrderStateManager.setPicapAutoAcceptFilter("MOSTRADOR") },
-                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3)
+                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 4)
                 ) {
                     Text(text = "Mostrador")
                 }
                 SegmentedButton(
+                    selected = picapAutoAcceptFilter == "TRASLADO",
+                    onClick = { OrderStateManager.setPicapAutoAcceptFilter("TRASLADO") },
+                    shape = SegmentedButtonDefaults.itemShape(index = 2, count = 4)
+                ) {
+                    Text(text = "Traslado")
+                }
+                SegmentedButton(
                     selected = picapAutoAcceptFilter == "TODOS",
                     onClick = { OrderStateManager.setPicapAutoAcceptFilter("TODOS") },
-                    shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3)
+                    shape = SegmentedButtonDefaults.itemShape(index = 3, count = 4)
                 ) {
                     Text(text = "Todos")
                 }
@@ -583,12 +600,39 @@ fun PicapContent(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Orden o mensaje de espera
-        if (order != null) {
-            OrderCard(
-                orderDisplay = OrderDisplay.Picap(order!!),
-                onDismiss = { OrderStateManager.clearOrder() }
-            )
+        // Carrusel de pedidos: mismo espacio de la tarjeta, páginas de más viejo
+        // (izquierda) a más nueva (derecha). Se arranca en la más nueva; gesto a la
+        // derecha muestra la anterior, gesto a la izquierda avanza hacia la más nueva.
+        if (history.isNotEmpty()) {
+            val pagerState = rememberPagerState(initialPage = history.lastIndex) { history.size }
+            var prevHistorySize by remember { mutableStateOf(history.size) }
+
+            LaunchedEffect(history.size) {
+                if (history.size > prevHistorySize) {
+                    // Llegó un pedido nuevo: saltar a la más nueva
+                    pagerState.animateScrollToPage(history.lastIndex)
+                } else if (pagerState.currentPage > history.lastIndex) {
+                    // Se eliminó la página que estaba visible: ajustar al último válido
+                    pagerState.scrollToPage(history.lastIndex)
+                }
+                prevHistorySize = history.size
+            }
+
+            HorizontalPager(
+                state = pagerState,
+                contentPadding = PaddingValues(horizontal = 8.dp),
+                pageSpacing = 8.dp,
+                modifier = Modifier.fillMaxWidth()
+            ) { page ->
+                val savedOrder = history[page]
+                OrderCard(
+                    orderDisplay = OrderDisplay.Picap(savedOrder),
+                    onDismiss = {
+                        OrderHistoryManager.removeById(savedOrder.id, context)
+                        if (order?.id == savedOrder.id) OrderStateManager.clearOrder()
+                    }
+                )
+            }
         } else {
             Box(
                 modifier = Modifier

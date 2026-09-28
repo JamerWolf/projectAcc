@@ -26,6 +26,10 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.projectacc.model.WhatsAppService
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 
 sealed class OrderDisplay {
     data class Picap(val order: PicapOrder) : OrderDisplay()
@@ -48,6 +52,20 @@ private fun openRouteInMaps(context: android.content.Context, origin: String, de
         val fallbackIntent = Intent(Intent.ACTION_VIEW, uri)
         context.startActivity(fallbackIntent)
     }
+}
+
+/**
+ * Formatea la hora de captura de una orden: "HH:mm" si es de hoy,
+ * "dd/MM HH:mm" si es de otro día. Cadena vacía si no hay timestamp.
+ */
+private fun formatOrderTime(timestamp: Long): String {
+    if (timestamp <= 0L) return ""
+    val now = Calendar.getInstance()
+    val orderTime = Calendar.getInstance().apply { timeInMillis = timestamp }
+    val sameDay = now.get(Calendar.YEAR) == orderTime.get(Calendar.YEAR) &&
+            now.get(Calendar.DAY_OF_YEAR) == orderTime.get(Calendar.DAY_OF_YEAR)
+    val pattern = if (sameDay) "HH:mm" else "dd/MM HH:mm"
+    return SimpleDateFormat(pattern, Locale.getDefault()).format(Date(timestamp))
 }
 
 /**
@@ -79,14 +97,28 @@ private fun PicapOrderCard(order: PicapOrder, onDismiss: () -> Unit) {
         )
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            // Source indicator + Title
+            // Source indicator + Title + hora de captura
             val shortTitle = if (order.servicio.contains("Mostrador", ignoreCase = true)) "Mostrador" else "OMS"
-            Text(
-                text = "\uD83D\uDE97 $shortTitle #${order.id}",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "\uD83D\uDE97 $shortTitle #${order.id}",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f)
+                )
+                val timeText = formatOrderTime(order.timestamp)
+                if (timeText.isNotEmpty()) {
+                    Text(
+                        text = timeText,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
 
             // Km totales (recogida + entrega) debajo del título
             val totalKm = order.kmRecogida + order.kmEntrega
