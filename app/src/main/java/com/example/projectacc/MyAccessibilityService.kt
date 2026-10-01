@@ -29,6 +29,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.log
@@ -103,10 +104,12 @@ class MyAccessibilityService : AccessibilityService() {
 
     // Almacena la última orden detectada para evitar duplicados por ID
     private var lastOrder: PicapOrder? = null
-    // ID de la última orden no-Cruz-Verde cerrada (evita repetir el clic en la X)
-    private var lastClosedId: String = ""
-    // ID de la orden no-CV con cierre agendado (evita duplicar el timer de 500 ms)
-    private var pendingCloseId: String = ""
+    // ID de la última orden no-Cruz-Verde cerrada (evita repetir el clic en la X).
+    // Volatile: se escribe desde la coroutine del cierre y se lee desde los eventos.
+    @Volatile private var lastClosedId: String = ""
+    // ID de la orden no-CV con cierre agendado (evita duplicar el timer de 500 ms).
+    // Volatile: se escribe en el evento y se lee/libera desde la coroutine.
+    @Volatile private var pendingCloseId: String = ""
 
     // Controla si ya se escaneó la lista al iniciar el auto-clic
     private var hasScannedInitially = false
@@ -374,10 +377,8 @@ class MyAccessibilityService : AccessibilityService() {
                     Log.d(TAG, "NO-CV: orden #${order.id} ya tiene timer activo (pending=$pendingCloseId); no se re-agenda.")
                 else -> {
                     pendingCloseId = order.id
-                    Log.i(TAG, "NO-CV: orden #${order.id} sin nodo Cruz Verde; cierre agendado en ${NON_CV_CLOSE_DELAY_MS} ms.")
-                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                        closeNonCvPopup(order.id)
-                    }, NON_CV_CLOSE_DELAY_MS)
+                    Log.i(TAG, "NO-CV: orden #${order.id} sin nodo Cruz Verde; cierre agendado en ${NON_CV_CLOSE_DELAY_MS} ms (serviceScope).")
+                    scheduleNonCvClose(order.id)
                 }
             }
             return false
@@ -1248,51 +1249,88 @@ class MyAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * Se ejecuta [NON_CV_CLOSE_DELAY_MS] ms después de detectar una oferta no-Cruz-Verde,
-     * para darle tiempo al popup de renderizar el nodo de servicio. Vuelve a leer el
-     * árbol recién renderizado: si la orden sigue sin nodo "Cruz Verde", cierra el
-     * overlay con clic en la X; si el nodo ya apareció, no hace nada y el siguiente
-     * evento procesa la orden con el flujo normal (overlay, filtro y registro).
+     * Resultado de un intento de cierre de la oferta no-CV.
+     * CLOSED y CV_RENDERED son terminales; el resto reintenta.
      */
-    private fun closeNonCvPopup(orderId: String) {
-        Log.i(TAG, "NO-CV: timer ejecutado para #$orderId (pending=$pendingCloseId).")
-        try {
-            val picapWindows = findAllWindows(PACKAGE_PICAP)
-            if (picapWindows.isEmpty()) {
-                Log.d(TAG, "NO-CV: sin ventanas Picap tras la espera; cierre cancelado (#$orderId).")
-                return
-            }
-            for (rootNode in picapWindows) {
-                val nodesContent = mutableListOf<String>()
-                flattenContentDescriptions(rootNode, nodesContent)
-                val order = parseOrder(nodesContent)
-                val isOfferPopup = nodesContent.any { it.contains("Aceptar", ignoreCase = true) }
-                if (!isOfferPopup) {
-                    Log.d(TAG, "NO-CV: releo sin popup de oferta (id='${order.id}', nodos=${nodesContent.size}; esperado #$orderId).")
-                    continue
-                }
-                if (order.id != orderId) {
-                    Log.d(TAG, "NO-CV: releo con id distinto '${order.id}' (esperado #$orderId); se decide por nodo de servicio.")
-                }
+    private enum class NonCvCloseOutcome { CLOSED, CV_RENDERED, NO_POPUP, NO_OFFER, CLICK_FAILED }
 
-                // Regla de producto: sin nodo "cruz verde" → cerrar, aunque el id leído
-                // difiera del agendado (el parseo de id es "último ID gana" y en modo app
-                // la ventana puede reordenarse entre la detección y el relectura).
-                if (order.servicio.isEmpty()) {
-                    hideKmOverlay()
-                    val clicked = findAndClickCloseButton(rootNode)
-                    if (clicked) lastClosedId = orderId
-                    Log.i(TAG, "NO-CV: orden #$orderId sin nodo Cruz Verde tras ${NON_CV_CLOSE_DELAY_MS} ms; cierre ejecutado (id leído '${order.id}', click=$clicked) y no registrada.")
-                } else {
-                    Log.i(TAG, "NO-CV: orden #$orderId ya mostró el nodo Cruz Verde tras ${NON_CV_CLOSE_DELAY_MS} ms (id leído '${order.id}'); se omite el cierre.")
-                }
-                break
+    /**
+     * Agenda el cierre de una oferta no-Cruz-Verde con el scope del servicio
+     * (coroutines), NO con Handler.postDelayed: en el dispositivo el timer del
+     * main looper nunca llegó a ejecutarse (pendingCloseId quedaba seteado y los
+     * eventos repetían "ya tiene timer activo" para siempre). Hasta 3 intentos:
+     * el primero a NON_CV_CLOSE_DELAY_MS, los reintentos con espera creciente.
+     */
+    private fun scheduleNonCvClose(orderId: String) {
+        serviceScope.launch {
+            val maxAttempts = 3
+            var attempt = 0
+            var outcome: NonCvCloseOutcome
+            do {
+                attempt++
+                delay(if (attempt == 1) NON_CV_CLOSE_DELAY_MS else NON_CV_CLOSE_DELAY_MS * attempt)
+                Log.i(TAG, "NO-CV: timer ejecutado para #$orderId (intento $attempt/$maxAttempts, pending=$pendingCloseId).")
+                outcome = attemptNonCvClose(orderId, attempt, maxAttempts)
+            } while (attempt < maxAttempts &&
+                outcome != NonCvCloseOutcome.CLOSED &&
+                outcome != NonCvCloseOutcome.CV_RENDERED)
+
+            if (outcome != NonCvCloseOutcome.CLOSED && outcome != NonCvCloseOutcome.CV_RENDERED) {
+                Log.i(TAG, "NO-CV: orden #$orderId sin cierre tras $maxAttempts intentos (ultimo=$outcome).")
             }
-            picapWindows.forEach { it.recycle() }
-        } finally {
-            Log.d(TAG, "NO-CV: timer finalizado (#$orderId); pendingCloseId='$pendingCloseId' -> ''.")
-            pendingCloseId = ""
+            if (pendingCloseId == orderId) {
+                Log.d(TAG, "NO-CV: timer finalizado (#$orderId); pendingCloseId='$pendingCloseId' -> ''.")
+                pendingCloseId = ""
+            }
         }
+    }
+
+    /**
+     * Relee las ventanas Picap y aplica la regla de producto: popup de oferta sin
+     * nodo "cruz verde" → clic en la X, aunque el id leído difiera del agendado
+     * (parseOrder se queda con el último ID del árbol y en modo app la ventana
+     * puede reordenarse entre la detección y el relectura). Se ejecuta en
+     * Dispatchers.Default; hideKmOverlay se postea al main porque usa WindowManager.
+     */
+    private fun attemptNonCvClose(orderId: String, attempt: Int, maxAttempts: Int): NonCvCloseOutcome {
+        val picapWindows = try {
+            findAllWindows(PACKAGE_PICAP)
+        } catch (e: Exception) {
+            Log.d(TAG, "NO-CV: lectura de ventanas fallo en intento $attempt (#$orderId): ${e.message}")
+            return NonCvCloseOutcome.NO_POPUP
+        }
+        if (picapWindows.isEmpty()) {
+            Log.d(TAG, "NO-CV: sin ventanas Picap en intento $attempt (#$orderId).")
+            return NonCvCloseOutcome.NO_POPUP
+        }
+        for (rootNode in picapWindows) {
+            val nodesContent = mutableListOf<String>()
+            flattenContentDescriptions(rootNode, nodesContent)
+            val order = parseOrder(nodesContent)
+            val isOfferPopup = nodesContent.any { it.contains("Aceptar", ignoreCase = true) }
+            if (!isOfferPopup) {
+                Log.d(TAG, "NO-CV: intento $attempt sin popup de oferta (id='${order.id}', nodos=${nodesContent.size}; esperado #$orderId).")
+                continue
+            }
+            if (order.id != orderId) {
+                Log.d(TAG, "NO-CV: intento $attempt con id distinto '${order.id}' (esperado #$orderId); se decide por nodo de servicio.")
+            }
+            if (order.servicio.isNotEmpty()) {
+                Log.i(TAG, "NO-CV: orden #$orderId ya mostro el nodo Cruz Verde (intento $attempt, id leido '${order.id}'); se omite el cierre.")
+                picapWindows.forEach { it.recycle() }
+                return NonCvCloseOutcome.CV_RENDERED
+            }
+            val clicked = findAndClickCloseButton(rootNode)
+            if (clicked) lastClosedId = orderId
+            Log.i(TAG, "NO-CV: orden #$orderId sin nodo Cruz Verde (intento $attempt/$maxAttempts, id leido '${order.id}'); cierre ejecutado (click=$clicked).")
+            picapWindows.forEach { it.recycle() }
+            android.os.Handler(android.os.Looper.getMainLooper()).post { hideKmOverlay() }
+            return if (clicked) NonCvCloseOutcome.CLOSED else NonCvCloseOutcome.CLICK_FAILED
+        }
+        val windowCount = picapWindows.size
+        picapWindows.forEach { it.recycle() }
+        Log.d(TAG, "NO-CV: intento $attempt sin ventana de oferta entre $windowCount ventana(s) (#$orderId).")
+        return NonCvCloseOutcome.NO_OFFER
     }
 
     /**
@@ -1308,7 +1346,10 @@ class MyAccessibilityService : AccessibilityService() {
 
         val candidates = mutableListOf<AccessibilityNodeInfo>()
         collectImageViewCandidates(rootNode, candidates)
-        if (candidates.isEmpty()) return false
+        if (candidates.isEmpty()) {
+            Log.d(TAG, "CLOSE: sin candidatos ImageView sin CD ni texto en la ventana; click omitido.")
+            return false
+        }
 
         var best: AccessibilityNodeInfo? = null
         var bestTop = Int.MAX_VALUE

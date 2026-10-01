@@ -1,19 +1,19 @@
 {
   "lens": "reliability",
   "evidence": [
-    "Reviewed staged diff in MyAccessibilityService.kt: the non-CV branch now logs all three scheduling outcomes (already closed, timer already active, scheduled), closeNonCvPopup logs timer entry with pending state, logs every re-read window (id, offer marker, node count) instead of silently continuing on id mismatch, decides closure by the product rule (no Cruz Verde service node) even when the re-read id differs from the scheduled id, and logs timer completion before resetting pendingCloseId; build.gradle.kts version bump to 0.3.40",
-    "aapt dump badging reports com.example.projectacc versionCode 55 versionName 0.3.40; compileDebugKotlin succeeded with only pre-existing deprecation warnings (TabRow, Divider, geocoder)"
+    "Reviewed staged diff in MyAccessibilityService.kt: the non-CV close is rescheduled from Handler.postDelayed to a serviceScope coroutine (scheduleNonCvClose) with up to three attempts and increasing delay, attemptNonCvClose re-reads Picap windows and applies the service-node closure rule with per-attempt logging, lastClosedId and pendingCloseId are annotated Volatile for cross-thread access, hideKmOverlay is posted to the main looper from the background attempt, and findAndClickCloseButton now logs when no close-button candidate exists; build.gradle.kts version bump to 0.3.41",
+    "aapt dump badging reports com.example.projectacc versionCode 56 versionName 0.3.41; compileDebugKotlin succeeded with only pre-existing deprecation warnings (TabRow, Divider, geocoder)"
   ],
   "findings": [
     {
       "id": "rel-1",
       "lens": "reliability",
       "severity": "SUGGESTION",
-      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt closeNonCvPopup closure decision by service node instead of scheduled id",
-      "claim": "The delayed close previously required the re-read id to equal the scheduled id, and the mismatch path was a silent continue; parseOrder keeps the last ID node in flatten order, so in app mode where the main window can contain several ID nodes the re-read could differ and the timer would exit without logging or closing (the reported symptom). The close decision now uses the product rule (offer popup present and no Cruz Verde service node) regardless of the parsed id, with a log line when the ids differ. Consequence: a scheduled non-CV offer closes even if the id parse shifted between detection and re-read; a different non-CV offer popup in the same window would also close, which matches the product rule that every non-CV offer is closed unconditionally.",
+      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt scheduleNonCvClose mechanism change",
+      "claim": "On device the main-looper Handler timer produced exactly one scheduling log and then never executed the callback: pendingCloseId stayed set (events kept logging ya tiene timer activo) and no timer-entry log ever appeared, so the close never ran. The schedule now uses serviceScope with kotlinx delay, the same coroutine machinery already used for WhatsApp processing in this service. Consequence: the close path no longer depends on the main-looper message queue for its critical section; if the coroutine also fails to run, the new timer-entry log will be absent while serviceScope-based WhatsApp logging still appears, isolating the failure to this feature rather than the timer mechanism.",
       "proof_refs": [
-        "closeNonCvPopup logs releo con id distinto and decides by order.servicio.isEmpty() after the isOfferPopup check",
-        "product rule documented in the branch comment: servicio empty means no Cruz Verde node in the flattened tree"
+        "device logcat showed cierre agendado once then ya tiene timer activo (pending=8db2f) with no timer ejecutado line under the same NO-CV filter",
+        "handleWhatsAppEvent already runs work through serviceScope.launch on Dispatchers.Default"
       ],
       "causal_disposition": "introduced"
     },
@@ -21,11 +21,11 @@
       "id": "rel-2",
       "lens": "reliability",
       "severity": "SUGGESTION",
-      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt NO-CV timer lifecycle logging",
-      "claim": "The timer lifecycle is now fully instrumented: scheduling outcomes in the branch, timer entry with pending state, per-window re-read details, and timer completion before the pendingCloseId reset. The previous build produced exactly one scheduling log and no further output, which left two indistinguishable hypotheses (timer never fired versus silent no-match exit). These lines resolve the ambiguity on the next device run; they add logcat volume only when a non-CV timer is active and can be downgraded afterwards without behavior change.",
+      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt attempt retries and background thread access",
+      "claim": "The close now retries up to three times (500 ms, 1000 ms, 1500 ms) and runs node reads, parseOrder, and performAction on Dispatchers.Default instead of the event thread. AccessibilityNodeInfo property reads and performAction are binder calls safe to invoke from a background thread, but the node instances are now touched from a different thread than the event loop, so any future change that mutates nodes concurrently with an event pass could race. The fields shared across threads (pendingCloseId, lastClosedId) are annotated Volatile; retries stop at the first terminal outcome (closed or Cruz Verde rendered) so a closed popup is not clicked again.",
       "proof_refs": [
-        "branch logs ya cerrada previamente, ya tiene timer activo, and cierre agendado as mutually exclusive outcomes",
-        "closeNonCvPopup first statement logs timer ejecutado and finally logs timer finalizado before reset"
+        "attemptNonCvClose runs inside serviceScope.launch and recycles window roots before returning",
+        "lastClosedId and pendingCloseId declared with @Volatile and written once per terminal transition"
       ],
       "causal_disposition": "introduced"
     },
@@ -33,11 +33,11 @@
       "id": "rel-3",
       "lens": "reliability",
       "severity": "SUGGESTION",
-      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt lastClosedId assignment on scheduled id",
-      "claim": "When the close click succeeds, lastClosedId is set to the scheduled orderId even if the window that was actually closed reported a different parsed id. This keeps deduplication keyed to the scheduled id, so the re-read popup with a shifted id could later be re-detected and re-scheduled once before being blocked by the service-node rule on its own timer. Risk is one extra timer cycle in the id-shift edge case, not a wrong click; the id-difference log makes it observable.",
+      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt hideKmOverlay post from background",
+      "claim": "hideKmOverlay is posted to the main looper via Handler.post after a successful background close instead of being called synchronously. WindowManager.removeViewImmediate must run on the main thread, so the post is required; the downside is that if the main looper is congested the km overlay hides late (cosmetic only, since later event passes also call hideKmOverlay). The popup click itself no longer depends on this post completing.",
       "proof_refs": [
-        "if (clicked) lastClosedId = orderId inside the close branch",
-        "branch logs re-agenda outcomes so a re-scheduled shifted id is visible in logcat"
+        "attemptNonCvClose posts hideKmOverlay through Handler(Looper.getMainLooper()).post after logging the click result",
+        "hideKmOverlay uses WindowManager.removeViewImmediate which requires the main thread"
       ],
       "causal_disposition": "introduced"
     }
