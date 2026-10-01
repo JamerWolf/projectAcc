@@ -103,6 +103,8 @@ class MyAccessibilityService : AccessibilityService() {
 
     // Almacena la última orden detectada para evitar duplicados por ID
     private var lastOrder: PicapOrder? = null
+    // ID de la última orden no-Cruz-Verde cerrada (evita repetir el clic en la X)
+    private var lastClosedId: String = ""
 
     // Controla si ya se escaneó la lista al iniciar el auto-clic
     private var hasScannedInitially = false
@@ -334,6 +336,19 @@ class MyAccessibilityService : AccessibilityService() {
         // Si no hay ID, no es una orden válida
         if (order.id.isEmpty()) {
             hideKmOverlay()
+            return false
+        }
+
+        // --- NO CRUZ VERDE: sin el nodo de servicio "Cruz Verde ..." (servicio vacío)
+        // y con estructura de popup de oferta → cerrar el overlay con clic en la X
+        // y NO registrar la orden en la tarjeta ni en el historial.
+        if (order.servicio.isEmpty() && nodesContent.any { it.contains("Aceptar", ignoreCase = true) }) {
+            if (order.id != lastClosedId) {
+                hideKmOverlay()
+                val clicked = findAndClickCloseButton(rootNode)
+                if (clicked) lastClosedId = order.id
+                Log.i(TAG, "NO-CV: orden #${order.id} sin nodo de servicio Cruz Verde; overlay cerrado (click=$clicked) y no registrada.")
+            }
             return false
         }
 
@@ -1196,6 +1211,88 @@ class MyAccessibilityService : AccessibilityService() {
                 val found = findAndClickAcceptButton(child)
                 child.recycle()
                 if (found) return true
+            }
+        }
+        return false
+    }
+
+    /**
+     * Busca el botón de cerrar (X) del popup y hace clic para descartar la oferta.
+     * La X es el ImageView sin contentDescription ni texto más a la derecha del
+     * popup (los demás iconos van a la izquierda de sus textos).
+     * Retorna true si logró hacer clic.
+     */
+    private fun findAndClickCloseButton(rootNode: AccessibilityNodeInfo?): Boolean {
+        if (rootNode == null) return false
+
+        val candidates = mutableListOf<AccessibilityNodeInfo>()
+        collectImageViewCandidates(rootNode, candidates)
+        if (candidates.isEmpty()) return false
+
+        // Elegir el ImageView vacío más a la derecha (bounds en coordenadas de pantalla)
+        var best: AccessibilityNodeInfo? = null
+        var bestRight = Int.MIN_VALUE
+        for (c in candidates) {
+            val r = Rect()
+            c.getBoundsInScreen(r)
+            if (r.right > bestRight) {
+                bestRight = r.right
+                best = c
+            }
+        }
+
+        var clicked = false
+        val target = best
+        if (target != null) {
+            Log.d(TAG, "CLOSE: candidato X en bounds right=$bestRight className=${target.className}")
+            if (target.isClickable) {
+                clicked = target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            } else {
+                // Intentar con el padre (patrón igual que el botón Aceptar)
+                val parent = target.parent
+                if (parent != null) {
+                    if (parent.isClickable) {
+                        clicked = parent.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                    }
+                    parent.recycle()
+                }
+                if (!clicked) {
+                    clicked = target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                }
+            }
+        }
+
+        for (c in candidates) {
+            if (c !== rootNode) c.recycle()
+        }
+        return clicked
+    }
+
+    /**
+     * Recolecta los ImageView sin contentDescription ni texto (posibles X de cierre).
+     * Los nodos que entran a [out] no se reciclan aquí; el caller los recicla.
+     * Retorna true si el nodo actual entró a [out].
+     */
+    private fun collectImageViewCandidates(
+        node: AccessibilityNodeInfo?,
+        out: MutableList<AccessibilityNodeInfo>
+    ): Boolean {
+        if (node == null) return false
+
+        val className = node.className?.toString() ?: ""
+        if (className.contains("ImageView") &&
+            node.contentDescription.isNullOrBlank() &&
+            node.text.isNullOrBlank()
+        ) {
+            out.add(node)
+            return true
+        }
+
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i)
+            if (child != null) {
+                val kept = collectImageViewCandidates(child, out)
+                if (!kept) child.recycle()
             }
         }
         return false

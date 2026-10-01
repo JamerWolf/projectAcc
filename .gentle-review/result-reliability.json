@@ -1,18 +1,19 @@
 {
   "lens": "reliability",
   "evidence": [
-    "Reviewed staged diff across MyAccessibilityService.kt (PicapOrder timestamp field line 50, isTrasladoDeliveryOk line 1145, filter gate rewrite, addOrder hooks), MainActivity.kt (4-segment selector, pager carousel line 607), OrderCard.kt (formatOrderTime line 61 plus title row time display), new OrderHistoryManager.kt (addOrder line 47, removeById line 58), OrderCard.kt time formatting, and build.gradle.kts version bump to 0.3.35",
-    "aapt dump badging reports com.example.projectacc versionCode 50 versionName 0.3.35; compileDebugKotlin succeeded with only pre-existing deprecation warnings (TabRow, Divider)"
+    "Reviewed staged diff in MyAccessibilityService.kt: lastClosedId field, NO-CV close branch in processPicapWindow after the empty-id guard, and new findAndClickCloseButton plus collectImageViewCandidates helpers; build.gradle.kts version bump to 0.3.36",
+    "aapt dump badging reports com.example.projectacc versionCode 51 versionName 0.3.36; compileDebugKotlin succeeded with only pre-existing deprecation warnings (TabRow, Divider, geocoder)"
   ],
   "findings": [
     {
       "id": "rel-1",
       "lens": "reliability",
       "severity": "SUGGESTION",
-      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt:1145 isTrasladoDeliveryOk does not verify the service type",
-      "claim": "The TRASLADO filter gate checks only the delivery address (Cruz Verde contains or SavedLocationManager match) and never the servicio field, by explicit product decision because Picap renders every Traslado as Mostrador. Consequence: an OMS order whose delivery address matches a saved location would also be accepted while the Traslado filter is active. The user accepted this trade-off when specifying the rule.",
+      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt findAndClickCloseButton picks the rightmost blank ImageView",
+      "claim": "The close button is located geometrically as the ImageView with blank contentDescription and text that is farthest right on screen. In the observed popup tree every other icon sits left of its text so the X wins, but a future Picap layout with a right-side icon could be clicked instead. The Aceptar-node guard limits the branch to service popups; if the heuristic misclicks the worst case is a harmless tap and a log line, and the log records the chosen bounds for diagnosis.",
       "proof_refs": [
-        "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt:1145 isTrasladoDeliveryOk checks direccionEntrega only"
+        "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt findAndClickCloseButton selects max bounds.right among candidates",
+        "logcat CLOSE candidato X emits chosen right coordinate"
       ],
       "causal_disposition": "introduced"
     },
@@ -20,10 +21,11 @@
       "id": "rel-2",
       "lens": "reliability",
       "severity": "SUGGESTION",
-      "location": "app/src/main/java/com/example/projectacc/OrderHistoryManager.kt:47 addOrder deduplicates by id and never refreshes",
-      "claim": "If Picap re-parses the same order id with updated fields (for example a changed ganancia), addOrder skips it and the carousel keeps the first-seen snapshot, while the live card shows the updated values via setOrder. Divergence is limited to display; auto-accept always evaluates the fresh parse.",
+      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt:840 parseOrder servicio excludes address nodes",
+      "claim": "Non-Cruz-Verde detection reuses servicio, which only matches a non-address node containing cruz verde. If Picap ever renders a genuine Cruz Verde order whose only Cruz Verde text is the pickup or delivery address, servicio would be empty and the popup would be auto-closed as non-CV. This matches the reported behavior today (CV orders carry an isolated Cruz Verde service label) and the maintainer rule that absence of that node means not Cruz Verde, so the risk is accepted; the NO-CV log line makes any misclassification visible in logcat.",
       "proof_refs": [
-        "app/src/main/java/com/example/projectacc/OrderHistoryManager.kt:47 addOrder returns early when the id already exists"
+        "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt:840 servicio firstOrNull skips dirRec and dirEnt",
+        "NO-CV log line prints the closed order id"
       ],
       "causal_disposition": "introduced"
     },
@@ -31,10 +33,11 @@
       "id": "rel-3",
       "lens": "reliability",
       "severity": "SUGGESTION",
-      "location": "app/src/main/java/com/example/projectacc/OrderHistoryManager.kt:47 unbounded history rewritten as one JSON blob per capture",
-      "claim": "History is intentionally unbounded until app data is cleared; every new order rewrites the full JSON array on the main thread. With thousands of stored orders this adds a periodic hitch at capture time. Acceptable at realistic volumes per the maintainer decision, but a size cap or background write would remove the risk if the list grows very large.",
+      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt NO-CV branch runs before the auto-accept switch check",
+      "claim": "The close action is unconditional per the explicit request: non-CV popups are dismissed even when the Picap auto-accept master switch is off, so a user browsing manually will never see a non-CV offer. No data is registered and no accept click happens, so nothing irreversible occurs, but if browsing non-CV offers becomes desirable the branch will need a switch guard.",
       "proof_refs": [
-        "app/src/main/java/com/example/projectacc/OrderHistoryManager.kt:47 persist rewrites the full list on each add"
+        "NO-CV branch placed before updateKmOverlay and before the isPicapAutoAcceptEnabled gate",
+        "user request states close the overlay automatically when the service is not Cruz Verde"
       ],
       "causal_disposition": "introduced"
     },
@@ -42,11 +45,11 @@
       "id": "rel-4",
       "lens": "reliability",
       "severity": "SUGGESTION",
-      "location": "app/src/main/java/com/example/projectacc/MainActivity.kt:607 pager snaps to newest whenever history grows",
-      "claim": "The LaunchedEffect jumps to the newest page on every history insertion, so a user browsing older orders is moved back to the newest when a new order arrives. This favors live-order visibility over browsing position and was a deliberate choice; deleting pages does not trigger the jump and clamps to the last valid index instead.",
+      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt lastClosedId dedupe skips retries after a successful click",
+      "claim": "lastClosedId is set only when the click returns true, so a failed click retries on the next event. If the click reports success but the popup does not actually close (for example a stale node), later events for the same id skip the close attempt and the popup stays open until the user dismisses it. This favors avoiding repeated clicks on an animating popup; recovery is manual and bounded to that one offer.",
       "proof_refs": [
-        "app/src/main/java/com/example/projectacc/MainActivity.kt:607 rememberPagerState initialPage history.lastIndex",
-        "app/src/main/java/com/example/projectacc/MainActivity.kt:610 LaunchedEffect animates to newest only when history grew"
+        "lastClosedId assigned only when findAndClickCloseButton returns true",
+        "branch returns false so window processing continues for other Picap windows"
       ],
       "causal_disposition": "introduced"
     }
