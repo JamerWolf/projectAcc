@@ -1291,8 +1291,11 @@ class MyAccessibilityService : AccessibilityService() {
      * (parseOrder se queda con el último ID del árbol y en modo app la ventana
      * puede reordenarse entre la detección y el relectura). Se ejecuta en
      * Dispatchers.Default; hideKmOverlay se postea al main porque usa WindowManager.
+     * performAction=true NO garantiza que se clickeó la X correcta: tras el clic
+     * se espera 300 ms y se verifica que el popup haya desaparecido antes de dar
+     * la orden por cerrada (lastClosedId solo se setea con cierre verificado).
      */
-    private fun attemptNonCvClose(orderId: String, attempt: Int, maxAttempts: Int): NonCvCloseOutcome {
+    private suspend fun attemptNonCvClose(orderId: String, attempt: Int, maxAttempts: Int): NonCvCloseOutcome {
         val picapWindows = try {
             findAllWindows(PACKAGE_PICAP)
         } catch (e: Exception) {
@@ -1321,11 +1324,18 @@ class MyAccessibilityService : AccessibilityService() {
                 return NonCvCloseOutcome.CV_RENDERED
             }
             val clicked = findAndClickCloseButton(rootNode)
-            if (clicked) lastClosedId = orderId
-            Log.i(TAG, "NO-CV: orden #$orderId sin nodo Cruz Verde (intento $attempt/$maxAttempts, id leido '${order.id}'); cierre ejecutado (click=$clicked).")
+            Log.i(TAG, "NO-CV: orden #$orderId sin nodo Cruz Verde (intento $attempt/$maxAttempts, id leido '${order.id}'); clic enviado (click=$clicked); verificando en 300 ms.")
             picapWindows.forEach { it.recycle() }
             android.os.Handler(android.os.Looper.getMainLooper()).post { hideKmOverlay() }
-            return if (clicked) NonCvCloseOutcome.CLOSED else NonCvCloseOutcome.CLICK_FAILED
+            if (!clicked) return NonCvCloseOutcome.CLICK_FAILED
+            delay(300)
+            if (picapOfferStillVisible()) {
+                Log.i(TAG, "NO-CV: click=true pero el popup de #$orderId sigue visible tras 300 ms; se reintenta.")
+                return NonCvCloseOutcome.CLICK_FAILED
+            }
+            lastClosedId = orderId
+            Log.i(TAG, "NO-CV: orden #$orderId cerrada y verificada (popup desaparecio); no registrada.")
+            return NonCvCloseOutcome.CLOSED
         }
         val windowCount = picapWindows.size
         picapWindows.forEach { it.recycle() }
@@ -1334,64 +1344,207 @@ class MyAccessibilityService : AccessibilityService() {
     }
 
     /**
+     * Verifica tras un clic si alguna ventana Picap todavía muestra el popup de
+     * oferta (nodos "ID: " y "Aceptar"). Se llama desde la coroutine de cierre.
+     */
+    private fun picapOfferStillVisible(): Boolean {
+        val wins = try {
+            findAllWindows(PACKAGE_PICAP)
+        } catch (e: Exception) {
+            return false
+        }
+        var visible = false
+        for (w in wins) {
+            val content = mutableListOf<String>()
+            flattenContentDescriptions(w, content)
+            if (content.any { it.startsWith("ID: ") } && content.any { it.contains("Aceptar") }) {
+                visible = true
+            }
+        }
+        wins.forEach { it.recycle() }
+        return visible
+    }
+
+    /**
+     * Devuelve el primer nodo en profundidad cuyo contentDescription o text
+     * satisface [pred]. El nodo devuelto es propiedad del caller; los
+     * descendientes descartados se reciclan.
+     */
+    private fun findFirstNodeMatching(
+        node: AccessibilityNodeInfo?,
+        pred: (String) -> Boolean
+    ): AccessibilityNodeInfo? {
+        if (node == null) return null
+        val desc = (node.contentDescription?.toString() ?: "") + "|" + (node.text?.toString() ?: "")
+        if (pred(desc)) return node
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            val found = findFirstNodeMatching(child, pred)
+            if (found != null) {
+                if (found !== child) child.recycle()
+                return found
+            }
+            child.recycle()
+        }
+        return null
+    }
+
+    /**
+     * Localiza el contenedor del popup: el ancestro más externo de "Aceptar" con
+     * bounds estrictamente menores a la ventana (inset, se corta al llegar al
+     * layout a pantalla completa) que además contiene un nodo "ID: " en su
+     * subárbol. Devuelve null si no hay; el caller entonces usa la ventana
+     * completa. El nodo devuelto es propiedad del caller.
+     */
+    private fun findPopupContainer(rootNode: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        val aceptar = findFirstNodeMatching(rootNode) { it.contains("Aceptar") } ?: return null
+        val rootRect = Rect().also { rootNode.getBoundsInScreen(it) }
+        val chain = mutableListOf(aceptar)
+        var current: AccessibilityNodeInfo = aceptar
+        var levels = 0
+        while (levels < 8) {
+            val parent = current.parent ?: break
+            val pr = Rect().also { parent.getBoundsInScreen(it) }
+            val fullSize = pr.width() >= rootRect.width() * 0.98f && pr.height() >= rootRect.height() * 0.98f
+            if (fullSize) {
+                parent.recycle()
+                break
+            }
+            chain.add(parent)
+            current = parent
+            levels++
+        }
+        var best: AccessibilityNodeInfo? = null
+        for (node in chain) {
+            val content = mutableListOf<String>()
+            flattenContentDescriptions(node, content)
+            if (content.any { it.startsWith("ID: ") }) best = node
+        }
+        chain.forEach { if (it !== best) it.recycle() }
+        return best
+    }
+
+    /** Clic en [target]: directo si es clickable, si no probando el padre. */
+    private fun clickNode(target: AccessibilityNodeInfo): Boolean {
+        if (target.isClickable) return target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+        val parent = target.parent
+        var clicked = false
+        if (parent != null) {
+            if (parent.isClickable) clicked = parent.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            parent.recycle()
+        }
+        if (!clicked) clicked = target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+        return clicked
+    }
+
+    /**
      * Busca el botón de cerrar (X) del popup y hace clic para descartar la oferta.
-     * El orden del árbol cambia según el modo (en overlay la X va después del chip,
-     * en modo app aparece antes), así que la selección es puramente geométrica:
-     * entre los ImageView sin contentDescription ni texto se elige el más arriba
-     * (fila de cabecera) y entre los de esa fila el más a la derecha.
-     * Retorna true si logró hacer clic.
+     * En modo app la ventana es toda la pantalla de Picap, así que candidatos de
+     * toda la ventana compiten contra la X (imágenes de lista, avatares, iconos),
+     * y elegir "el más arriba" clickeó una imagen equivocada (click=true sin
+     * cerrar). Por eso la búsqueda se acota al subárbol del popup y se prioriza,
+     * en orden: (1) nodo con nombre de cierre explícito (close/cerrar/dismiss/
+     * descartar); (2) ImageView sin CD ni texto en la banda superior (40%) del
+     * popup, eligiendo primero el más clickeable y entre iguales el más a la
+     * derecha (la X vive en la esquina superior), empate → más arriba; (3) el
+     * mismo criterio sobre el popup completo; (4) toda la ventana con la regla
+     * histórica. Retorna true si performAction devolvió true; el caller verifica
+     * si el popup realmente desapareció.
      */
     private fun findAndClickCloseButton(rootNode: AccessibilityNodeInfo?): Boolean {
         if (rootNode == null) return false
+        val rootRect = Rect().also { rootNode.getBoundsInScreen(it) }
 
-        val candidates = mutableListOf<AccessibilityNodeInfo>()
-        collectImageViewCandidates(rootNode, candidates)
-        if (candidates.isEmpty()) {
-            Log.d(TAG, "CLOSE: sin candidatos ImageView sin CD ni texto en la ventana; click omitido.")
+        val scope = findPopupContainer(rootNode)
+        val scopeRect = Rect().also { (scope ?: rootNode).getBoundsInScreen(it) }
+        val scopeLabel = if (scope != null) "popup" else "ventana"
+
+        // 1) Nombre de cierre explícito dentro del popup
+        val named = scope?.let {
+            findFirstNodeMatching(it) { s ->
+                val l = s.lowercase()
+                l.contains("close") || l.contains("cerrar") ||
+                    l.contains("dismiss") || l.contains("descartar")
+            }
+        }
+        if (named != null) {
+            val nr = Rect().also { named.getBoundsInScreen(it) }
+            Log.d(TAG, "CLOSE: nodo con nombre de cierre cd='${named.contentDescription}' text='${named.text}' bounds=$nr; clic directo.")
+            val ok = clickNode(named)
+            Log.d(TAG, "CLOSE: performAction(named)=$ok")
+            if (named !== rootNode && named !== scope) named.recycle()
+            scope.recycle()
+            return ok
+        }
+
+        // 2-4) Candidatos geométricos
+        val searchRoot: AccessibilityNodeInfo = scope ?: rootNode
+        val all = mutableListOf<AccessibilityNodeInfo>()
+        collectImageViewCandidates(searchRoot, all)
+        if (all.isEmpty()) {
+            Log.d(TAG, "CLOSE: sin candidatos ImageView sin CD ni texto en $scopeLabel (scope=$scopeRect); click omitido.")
+            if (searchRoot !== rootNode) searchRoot.recycle()
             return false
         }
 
+        val bandLimit = scopeRect.top + (scopeRect.height() * 0.4f).toInt()
+        val band = all.filter { c ->
+            val r = Rect().also { c.getBoundsInScreen(it) }
+            r.top <= bandLimit && r.bottom >= scopeRect.top
+        }
+        val pool: List<AccessibilityNodeInfo>
+        val stage: String
+        if (band.isNotEmpty()) {
+            pool = band
+            stage = "banda-superior-$scopeLabel"
+        } else if (scope != null) {
+            pool = all
+            stage = "popup-completo"
+        } else {
+            pool = all
+            stage = "ventana"
+        }
+
+        val desc = StringBuilder()
         var best: AccessibilityNodeInfo? = null
-        var bestTop = Int.MAX_VALUE
+        var bestRank = -1
         var bestRight = Int.MIN_VALUE
-        val candidatesDesc = StringBuilder()
-        for (c in candidates) {
-            val r = Rect()
-            c.getBoundsInScreen(r)
-            candidatesDesc.append("[top=").append(r.top)
-                .append(",right=").append(r.right).append("] ")
-            if (r.top < bestTop || (r.top == bestTop && r.right > bestRight)) {
-                bestTop = r.top
-                bestRight = r.right
+        var bestTop = Int.MAX_VALUE
+        for (c in pool) {
+            val r = Rect().also { c.getBoundsInScreen(it) }
+            val rank = if (c.isClickable) 2 else {
+                val p = c.parent
+                val parentClickable = p?.isClickable == true
+                p?.recycle()
+                if (parentClickable) 1 else 0
+            }
+            desc.append("[top=").append(r.top).append(",left=").append(r.left)
+                .append(",right=").append(r.right).append(",bottom=").append(r.bottom)
+                .append(",click=").append(rank)
+                .append(",id=").append(c.viewIdResourceName?.substringAfterLast('/') ?: "-")
+                .append("] ")
+            val better = best == null || rank > bestRank ||
+                (rank == bestRank && (r.right > bestRight || (r.right == bestRight && r.top < bestTop)))
+            if (better) {
                 best = c
+                bestRank = rank
+                bestRight = r.right
+                bestTop = r.top
             }
         }
-        Log.d(TAG, "CLOSE: candidatos ImageView sin CD: $candidatesDesc")
+        Log.d(TAG, "CLOSE: candidatos($stage, scope=$scopeRect, ventana=$rootRect): $desc")
 
         var clicked = false
         val target = best
         if (target != null) {
-            Log.d(TAG, "CLOSE: candidato X en bounds top=$bestTop right=$bestRight className=${target.className}")
-            if (target.isClickable) {
-                clicked = target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-            } else {
-                // Intentar con el padre (patrón igual que el botón Aceptar)
-                val parent = target.parent
-                if (parent != null) {
-                    if (parent.isClickable) {
-                        clicked = parent.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                    }
-                    parent.recycle()
-                }
-                if (!clicked) {
-                    clicked = target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                }
-            }
+            val tr = Rect().also { target.getBoundsInScreen(it) }
+            Log.d(TAG, "CLOSE: elegido[$stage] top=${tr.top} left=${tr.left} right=${tr.right} bottom=${tr.bottom} click=$bestRank className=${target.className}")
+            clicked = clickNode(target)
+            Log.d(TAG, "CLOSE: performAction=$clicked")
         }
 
-        for (c in candidates) {
-            if (c !== rootNode) c.recycle()
-        }
+        all.forEach { if (it !== rootNode && it !== scope) it.recycle() }
+        if (scope != null && scope !== rootNode) scope.recycle()
         return clicked
     }
 

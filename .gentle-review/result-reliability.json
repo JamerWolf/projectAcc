@@ -1,19 +1,19 @@
 {
   "lens": "reliability",
   "evidence": [
-    "Reviewed staged diff in MyAccessibilityService.kt: the non-CV close is rescheduled from Handler.postDelayed to a serviceScope coroutine (scheduleNonCvClose) with up to three attempts and increasing delay, attemptNonCvClose re-reads Picap windows and applies the service-node closure rule with per-attempt logging, lastClosedId and pendingCloseId are annotated Volatile for cross-thread access, hideKmOverlay is posted to the main looper from the background attempt, and findAndClickCloseButton now logs when no close-button candidate exists; build.gradle.kts version bump to 0.3.41",
-    "aapt dump badging reports com.example.projectacc versionCode 56 versionName 0.3.41; compileDebugKotlin succeeded with only pre-existing deprecation warnings (TabRow, Divider, geocoder)"
+    "Reviewed staged diff in MyAccessibilityService.kt: findAndClickCloseButton now scopes candidate search to the popup subtree (findPopupContainer ascends from the Aceptar node to the outermost inset ancestor containing an ID node), prefers an explicitly named close node (close/cerrar/dismiss/descartar), then selects within the top 40 percent band of the popup preferring clickable candidates and the rightmost position, logging full bounds, clickable rank, and view id for every candidate; attemptNonCvClose verifies after a 300 ms delay that the offer popup actually disappeared before setting lastClosedId (picapOfferStillVisible), retries otherwise; build.gradle.kts version bump to 0.3.42",
+    "aapt dump badging reports com.example.projectacc versionCode 57 versionName 0.3.42; compileDebugKotlin succeeded with only pre-existing deprecation warnings (TabRow, Divider, geocoder)"
   ],
   "findings": [
     {
       "id": "rel-1",
       "lens": "reliability",
       "severity": "SUGGESTION",
-      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt scheduleNonCvClose mechanism change",
-      "claim": "On device the main-looper Handler timer produced exactly one scheduling log and then never executed the callback: pendingCloseId stayed set (events kept logging ya tiene timer activo) and no timer-entry log ever appeared, so the close never ran. The schedule now uses serviceScope with kotlinx delay, the same coroutine machinery already used for WhatsApp processing in this service. Consequence: the close path no longer depends on the main-looper message queue for its critical section; if the coroutine also fails to run, the new timer-entry log will be absent while serviceScope-based WhatsApp logging still appears, isolating the failure to this feature rather than the timer mechanism.",
+      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt findAndClickCloseButton popup scoping and selection stages",
+      "claim": "The v0.3.41 device log showed the geometric topmost rule selected an ImageView at top=558 right=440 from eight candidates spanning the whole app window, performAction returned true, and the popup stayed open; in app mode the window is the entire Picap screen so list images and avatars competed with the close button. The new selection runs in four stages (named close node, top-40-percent band of the popup subtree, full popup, whole window fallback) and prefers clickable then rightmost. Consequence: the click targets the popup header corner instead of arbitrary window imagery, but if the popup layout puts the X outside the computed band or the popup container heuristic fails, the fallback stages can still select a wrong image; the full per-candidate bounds log makes any miss diagnosable from one logcat run, and the post-click verification prevents a wrong click from being recorded as closed.",
       "proof_refs": [
-        "device logcat showed cierre agendado once then ya tiene timer activo (pending=8db2f) with no timer ejecutado line under the same NO-CV filter",
-        "handleWhatsAppEvent already runs work through serviceScope.launch on Dispatchers.Default"
+        "device logcat CLOSE candidatos list shows eight window-wide candidates and the chosen one at top=558 right=440 with click=true but popup remaining",
+        "findPopupContainer ascends from the Aceptar node stopping at full-screen layouts and picks the outermost inset ancestor containing an ID node"
       ],
       "causal_disposition": "introduced"
     },
@@ -21,11 +21,11 @@
       "id": "rel-2",
       "lens": "reliability",
       "severity": "SUGGESTION",
-      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt attempt retries and background thread access",
-      "claim": "The close now retries up to three times (500 ms, 1000 ms, 1500 ms) and runs node reads, parseOrder, and performAction on Dispatchers.Default instead of the event thread. AccessibilityNodeInfo property reads and performAction are binder calls safe to invoke from a background thread, but the node instances are now touched from a different thread than the event loop, so any future change that mutates nodes concurrently with an event pass could race. The fields shared across threads (pendingCloseId, lastClosedId) are annotated Volatile; retries stop at the first terminal outcome (closed or Cruz Verde rendered) so a closed popup is not clicked again.",
+      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt post-click verification and lastClosedId gating",
+      "claim": "Previously lastClosedId was set on performAction=true alone, which blocked all further scheduling for that id while the popup was still open (observed as ya cerrada previamente on the next events). Now the coroutine waits 300 ms and re-reads the windows (picapOfferStillVisible requires both an ID node and an Aceptar node); only a vanished popup sets lastClosedId and returns CLOSED, while a surviving popup returns CLICK_FAILED so the retry loop runs again. A false CLOSED is possible if the offer window is momentarily unreadable at verification time, and a false CLICK_FAILED would re-click a successfully closed popup, which degrades to a no-op because the later pass finds no offer window.",
       "proof_refs": [
-        "attemptNonCvClose runs inside serviceScope.launch and recycles window roots before returning",
-        "lastClosedId and pendingCloseId declared with @Volatile and written once per terminal transition"
+        "attemptNonCvClose calls delay(300) then picapOfferStillVisible before assigning lastClosedId",
+        "device logcat showed lastClosedId set after a non-closing click, blocking retries with ya cerrada previamente"
       ],
       "causal_disposition": "introduced"
     },
@@ -33,11 +33,11 @@
       "id": "rel-3",
       "lens": "reliability",
       "severity": "SUGGESTION",
-      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt hideKmOverlay post from background",
-      "claim": "hideKmOverlay is posted to the main looper via Handler.post after a successful background close instead of being called synchronously. WindowManager.removeViewImmediate must run on the main thread, so the post is required; the downside is that if the main looper is congested the km overlay hides late (cosmetic only, since later event passes also call hideKmOverlay). The popup click itself no longer depends on this post completing.",
+      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt node traversal helpers and recycling",
+      "claim": "findFirstNodeMatching and findPopupContainer traverse with getChild and parent, returning nodes owned by the caller while recycling discarded descendants and chain members; the full-screen ancestor is recycled only as a fresh parent instance and never the caller-owned rootNode. The recycling discipline is easy to regress: recycling the returned popup container before the click, or recycling a node that candidates still reference, would invalidate nodes mid-use. The code order (collect, click, then recycle) keeps the window roots alive until attemptNonCvClose finishes, and a mistake would surface as an IllegalStateException in logcat rather than a silent wrong click.",
       "proof_refs": [
-        "attemptNonCvClose posts hideKmOverlay through Handler(Looper.getMainLooper()).post after logging the click result",
-        "hideKmOverlay uses WindowManager.removeViewImmediate which requires the main thread"
+        "named branch clicks and logs before recycling named and scope",
+        "geometry branch collects from searchRoot and recycles all only after clickNode returns"
       ],
       "causal_disposition": "introduced"
     }
