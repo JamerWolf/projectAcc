@@ -1,19 +1,19 @@
 {
   "lens": "reliability",
   "evidence": [
-    "Reviewed staged diff in MyAccessibilityService.kt: removed the named-close-node stage (findFirstNodeMatching for close/cerrar/dismiss/descartar with direct click and its own recycle path) from findAndClickCloseButton, so X detection now runs exclusively through the geometric stages - blank ImageView candidates within the popup subtree (findPopupContainer scope), top-40 percent band first, then full popup, then whole window, ranked by clickable-ness then rightmost then topmost; the geometric flow with its single recycle block remains intact; build.gradle.kts version bump to 0.3.45",
-    "aapt dump badging reports com.example.projectacc versionCode 60 versionName 0.3.45; compileDebugKotlin succeeded with no warnings; findFirstNodeMatching keeps its remaining caller findPopupContainer so no dead symbol remains"
+    "Reviewed staged diff in MyAccessibilityService.kt: removed the top-40-percent band filter from findAndClickCloseButton so every blank ImageView inside the resolved scope competes in one ranking (clickable rank first, then rightmost, then topmost); stage labels in candidatos and elegido logs simplified to popup or ventana; KDoc rewritten to document the Compose flat-tree reason - the in-app popup has no card container so scope equals the full screen, the X sits about 62 percent down and the old band admitted the centered chevron while excluding the X, producing a click on the chevron on the first attempt; build.gradle.kts version bump to 0.3.46",
+    "aapt dump badging reports com.example.projectacc versionCode 61 versionName 0.3.46; compileDebugKotlin succeeded with no warnings; device logs from v0.3.45 show the band pool contained only the chevron at top 538 while the X at top 982 was unreachable, and the full-popup pool ranked the X at right 666 over the chevron at right 440 and closed successfully"
   ],
   "findings": [
     {
       "id": "rel-1",
       "lens": "reliability",
       "severity": "SUGGESTION",
-      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt findAndClickCloseButton stage removal",
-      "claim": "Deleting the named-node stage means an accessibility label containing close/cerrar/dismiss/descartar on a node other than the actual X would no longer receive the click, which was the reason the stage existed as a semantically safe first choice; the geometric ranking must now identify the button on its own. On the current popup the X is a blank ImageView in the top-right corner, so the band filter plus clickable-preferred rightmost ranking covers it, and the 300 ms post-click verification still catches a wrong pick by retrying up to three times; if a future popup layout marks the X with a label while making it non-clickable without a clickable parent, rank 0 candidates are still eligible and the rightmost-tiebreak decides.",
+      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt findAndClickCloseButton ranking over the whole scope",
+      "claim": "Removing the band means the first attempt now evaluates the same candidate set that previously only attempt two saw, so the X at right 666 with clickable rank 2 beats the centered chevron at right 440 with the same rank on rightness alone, eliminating the wasted first attempt against the chevron. The residual risk is a clickable blank ImageView further right than the X inside the same scope - none appeared in the recorded candidate dumps for either mode, the 300 ms verification converts a wrong pick into a retried CLICK_FAILED, and the full candidate list in logcat would expose such a competitor immediately.",
       "proof_refs": [
-        "findAndClickCloseButton now starts at the geometric comment with no findFirstNodeMatching call for close keywords",
-        "attemptNonCvClose still verifies closure after 300 ms and retries on CLICK_FAILED"
+        "device log attempt one shows the band pool with only the chevron at top 538 left 280 right 440 and the popup staying open after click",
+        "device log attempt two shows the full popup pool with the X at right 666 beating the chevron at right 440 and closing verified"
       ],
       "causal_disposition": "introduced"
     },
@@ -21,11 +21,11 @@
       "id": "rel-2",
       "lens": "reliability",
       "severity": "SUGGESTION",
-      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt node recycling after named-branch removal",
-      "claim": "The removed branch carried its own recycle sequence (named, scope, early return) while the geometric path recycles through the shared tail block (all minus rootNode/scope, then scope). With the branch gone there is a single exit path for recycling, which reduces the chance of double-recycle or leak; the candidates list can still contain scope itself when scope is a blank ImageView and the tail skips it via the scope reference check, so each node is recycled at most once.",
+      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt findPopupContainer under Compose flat trees",
+      "claim": "In app mode findPopupContainer cannot isolate the offer card because Picap renders a flattened Compose semantics tree where the X, the chevron and Aceptar are siblings; the outermost inset ancestor containing an ID node ends up being the content frame at nearly full-screen bounds, so scope degrades to the whole screen and the scope label in the logs reads popup even though it equals the window. This is tolerable now that ranking alone decides and the outside-app mode still benefits from window equals card, but any future scope-based heuristic would inherit the same imprecision in app mode; improving it would require a non-structural anchor such as the topmost card text row.",
       "proof_refs": [
-        "the tail block recycles every candidate except rootNode and scope, then recycles scope when non-null, so each node is released once",
-        "no early return remains between candidate collection and the tail recycle block"
+        "device log scope rect 0 0 to 720 1520 against window rect 0 0 to 720 1600 in app mode shows the scope covering virtually the entire window",
+        "device log outside the app shows scope equal to the window and a single successful pick with label ventana"
       ],
       "causal_disposition": "introduced"
     }

@@ -1498,16 +1498,15 @@ class MyAccessibilityService : AccessibilityService() {
 
     /**
      * Busca el botón de cerrar (X) del popup y hace clic para descartar la oferta.
-     * En modo app la ventana es toda la pantalla de Picap, así que candidatos de
-     * toda la ventana compiten contra la X (imágenes de lista, avatares, iconos),
-     * y elegir "el más arriba" clickeó una imagen equivocada (click=true sin
-     * cerrar). Por eso la búsqueda se acota al subárbol del popup sobre ImageView
-     * sin CD ni texto, priorizando en orden: (1) la banda superior (40%) del
-     * popup, eligiendo primero el más clickeable y entre iguales el más a la
-     * derecha (la X vive en la esquina superior), empate → más arriba; (2) el
-     * mismo criterio sobre el popup completo; (3) toda la ventana con la regla
-     * histórica. Retorna true si performAction devolvió true; el caller verifica
-     * si el popup realmente desapareció.
+     * En modo app el árbol de Picap es plano (Compose): el X, el chevron superior
+     * y "Aceptar" son hermanos, no hay contenedor de tarjeta, así que el scope
+     * equivale a la pantalla completa y el X cae ~62% hacia abajo. Una banda
+     * superior al 40% metía al chevron centrado y EXCLUIA al X (click en la
+     * flecha sin cerrar). Por eso no hay banda: se evalúa todo el scope sobre
+     * ImageView sin CD ni texto y se prioriza (1) más clickeable, (2) el más a
+     * la derecha (la X vive en la esquina superior derecha; el chevron va al
+     * centro), (3) empate → más arriba. Retorna true si performAction devolvió
+     * true; el caller verifica si el popup realmente desapareció.
      */
     private fun findAndClickCloseButton(rootNode: AccessibilityNodeInfo?): Boolean {
         if (rootNode == null) return false
@@ -1527,30 +1526,12 @@ class MyAccessibilityService : AccessibilityService() {
             return false
         }
 
-        val bandLimit = scopeRect.top + (scopeRect.height() * 0.4f).toInt()
-        val band = all.filter { c ->
-            val r = Rect().also { c.getBoundsInScreen(it) }
-            r.top <= bandLimit && r.bottom >= scopeRect.top
-        }
-        val pool: List<AccessibilityNodeInfo>
-        val stage: String
-        if (band.isNotEmpty()) {
-            pool = band
-            stage = "banda-superior-$scopeLabel"
-        } else if (scope != null) {
-            pool = all
-            stage = "popup-completo"
-        } else {
-            pool = all
-            stage = "ventana"
-        }
-
         val desc = StringBuilder()
         var best: AccessibilityNodeInfo? = null
         var bestRank = -1
         var bestRight = Int.MIN_VALUE
         var bestTop = Int.MAX_VALUE
-        for (c in pool) {
+        for (c in all) {
             val r = Rect().also { c.getBoundsInScreen(it) }
             val rank = if (c.isClickable) 2 else {
                 val p = c.parent
@@ -1572,13 +1553,13 @@ class MyAccessibilityService : AccessibilityService() {
                 bestTop = r.top
             }
         }
-        Log.d(TAG, "CLOSE: candidatos($stage, scope=$scopeRect, ventana=$rootRect): $desc")
+        Log.d(TAG, "CLOSE: candidatos($scopeLabel, scope=$scopeRect, ventana=$rootRect): $desc")
 
         var clicked = false
         val target = best
         if (target != null) {
             val tr = Rect().also { target.getBoundsInScreen(it) }
-            Log.d(TAG, "CLOSE: elegido[$stage] top=${tr.top} left=${tr.left} right=${tr.right} bottom=${tr.bottom} click=$bestRank className=${target.className}")
+            Log.d(TAG, "CLOSE: elegido[$scopeLabel] top=${tr.top} left=${tr.left} right=${tr.right} bottom=${tr.bottom} click=$bestRank className=${target.className}")
             clicked = clickNode(target)
             Log.d(TAG, "CLOSE: performAction=$clicked")
         }
