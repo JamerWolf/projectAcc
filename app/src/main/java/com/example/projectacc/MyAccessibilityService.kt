@@ -367,12 +367,18 @@ class MyAccessibilityService : AccessibilityService() {
         // y con estructura de popup de oferta → agendar el cierre en 500 ms (tiempo de
         // render) y NO registrar la orden en la tarjeta ni en el historial.
         if (order.servicio.isEmpty() && nodesContent.any { it.contains("Aceptar", ignoreCase = true) }) {
-            if (order.id != lastClosedId && order.id != pendingCloseId) {
-                pendingCloseId = order.id
-                Log.i(TAG, "NO-CV: orden #${order.id} sin nodo Cruz Verde; cierre agendado en ${NON_CV_CLOSE_DELAY_MS} ms.")
-                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                    closeNonCvPopup(order.id)
-                }, NON_CV_CLOSE_DELAY_MS)
+            when {
+                order.id == lastClosedId ->
+                    Log.d(TAG, "NO-CV: orden #${order.id} ya cerrada previamente; no se re-agenda.")
+                order.id == pendingCloseId ->
+                    Log.d(TAG, "NO-CV: orden #${order.id} ya tiene timer activo (pending=$pendingCloseId); no se re-agenda.")
+                else -> {
+                    pendingCloseId = order.id
+                    Log.i(TAG, "NO-CV: orden #${order.id} sin nodo Cruz Verde; cierre agendado en ${NON_CV_CLOSE_DELAY_MS} ms.")
+                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                        closeNonCvPopup(order.id)
+                    }, NON_CV_CLOSE_DELAY_MS)
+                }
             }
             return false
         }
@@ -1249,6 +1255,7 @@ class MyAccessibilityService : AccessibilityService() {
      * evento procesa la orden con el flujo normal (overlay, filtro y registro).
      */
     private fun closeNonCvPopup(orderId: String) {
+        Log.i(TAG, "NO-CV: timer ejecutado para #$orderId (pending=$pendingCloseId).")
         try {
             val picapWindows = findAllWindows(PACKAGE_PICAP)
             if (picapWindows.isEmpty()) {
@@ -1260,20 +1267,30 @@ class MyAccessibilityService : AccessibilityService() {
                 flattenContentDescriptions(rootNode, nodesContent)
                 val order = parseOrder(nodesContent)
                 val isOfferPopup = nodesContent.any { it.contains("Aceptar", ignoreCase = true) }
-                if (order.id != orderId || !isOfferPopup) continue
+                if (!isOfferPopup) {
+                    Log.d(TAG, "NO-CV: releo sin popup de oferta (id='${order.id}', nodos=${nodesContent.size}; esperado #$orderId).")
+                    continue
+                }
+                if (order.id != orderId) {
+                    Log.d(TAG, "NO-CV: releo con id distinto '${order.id}' (esperado #$orderId); se decide por nodo de servicio.")
+                }
 
+                // Regla de producto: sin nodo "cruz verde" → cerrar, aunque el id leído
+                // difiera del agendado (el parseo de id es "último ID gana" y en modo app
+                // la ventana puede reordenarse entre la detección y el relectura).
                 if (order.servicio.isEmpty()) {
                     hideKmOverlay()
                     val clicked = findAndClickCloseButton(rootNode)
                     if (clicked) lastClosedId = orderId
-                    Log.i(TAG, "NO-CV: orden #$orderId sigue sin nodo Cruz Verde tras ${NON_CV_CLOSE_DELAY_MS} ms; overlay cerrado (click=$clicked) y no registrada.")
+                    Log.i(TAG, "NO-CV: orden #$orderId sin nodo Cruz Verde tras ${NON_CV_CLOSE_DELAY_MS} ms; cierre ejecutado (id leído '${order.id}', click=$clicked) y no registrada.")
                 } else {
-                    Log.i(TAG, "NO-CV: orden #$orderId ya mostró el nodo Cruz Verde tras ${NON_CV_CLOSE_DELAY_MS} ms; se omite el cierre.")
+                    Log.i(TAG, "NO-CV: orden #$orderId ya mostró el nodo Cruz Verde tras ${NON_CV_CLOSE_DELAY_MS} ms (id leído '${order.id}'); se omite el cierre.")
                 }
                 break
             }
             picapWindows.forEach { it.recycle() }
         } finally {
+            Log.d(TAG, "NO-CV: timer finalizado (#$orderId); pendingCloseId='$pendingCloseId' -> ''.")
             pendingCloseId = ""
         }
     }
