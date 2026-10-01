@@ -105,6 +105,8 @@ class MyAccessibilityService : AccessibilityService() {
     private var lastOrder: PicapOrder? = null
     // ID de la última orden no-Cruz-Verde cerrada (evita repetir el clic en la X)
     private var lastClosedId: String = ""
+    // ID de la orden no-CV con cierre agendado (evita duplicar el timer de 500 ms)
+    private var pendingCloseId: String = ""
 
     // Controla si ya se escaneó la lista al iniciar el auto-clic
     private var hasScannedInitially = false
@@ -112,6 +114,9 @@ class MyAccessibilityService : AccessibilityService() {
     // Cooldown para evitar clics repetidos en auto-accept
     private var lastClickTime: Long = 0L
     private val CLICK_COOLDOWN_MS = 2000L
+    // Espera antes de cerrar una oferta no-CV: da tiempo al popup de renderizar
+    // el nodo de servicio "Cruz Verde ..." antes de decidir que no lo es.
+    private val NON_CV_CLOSE_DELAY_MS = 500L
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -340,14 +345,15 @@ class MyAccessibilityService : AccessibilityService() {
         }
 
         // --- NO CRUZ VERDE: sin el nodo de servicio "Cruz Verde ..." (servicio vacío)
-        // y con estructura de popup de oferta → cerrar el overlay con clic en la X
-        // y NO registrar la orden en la tarjeta ni en el historial.
+        // y con estructura de popup de oferta → agendar el cierre en 500 ms (tiempo de
+        // render) y NO registrar la orden en la tarjeta ni en el historial.
         if (order.servicio.isEmpty() && nodesContent.any { it.contains("Aceptar", ignoreCase = true) }) {
-            if (order.id != lastClosedId) {
-                hideKmOverlay()
-                val clicked = findAndClickCloseButton(rootNode)
-                if (clicked) lastClosedId = order.id
-                Log.i(TAG, "NO-CV: orden #${order.id} sin nodo de servicio Cruz Verde; overlay cerrado (click=$clicked) y no registrada.")
+            if (order.id != lastClosedId && order.id != pendingCloseId) {
+                pendingCloseId = order.id
+                Log.i(TAG, "NO-CV: orden #${order.id} sin nodo Cruz Verde; cierre agendado en ${NON_CV_CLOSE_DELAY_MS} ms.")
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                    closeNonCvPopup(order.id)
+                }, NON_CV_CLOSE_DELAY_MS)
             }
             return false
         }
@@ -1214,6 +1220,43 @@ class MyAccessibilityService : AccessibilityService() {
             }
         }
         return false
+    }
+
+    /**
+     * Se ejecuta [NON_CV_CLOSE_DELAY_MS] ms después de detectar una oferta no-Cruz-Verde,
+     * para darle tiempo al popup de renderizar el nodo de servicio. Vuelve a leer el
+     * árbol recién renderizado: si la orden sigue sin nodo "Cruz Verde", cierra el
+     * overlay con clic en la X; si el nodo ya apareció, no hace nada y el siguiente
+     * evento procesa la orden con el flujo normal (overlay, filtro y registro).
+     */
+    private fun closeNonCvPopup(orderId: String) {
+        try {
+            val picapWindows = findAllWindows(PACKAGE_PICAP)
+            if (picapWindows.isEmpty()) {
+                Log.d(TAG, "NO-CV: sin ventanas Picap tras la espera; cierre cancelado (#$orderId).")
+                return
+            }
+            for (rootNode in picapWindows) {
+                val nodesContent = mutableListOf<String>()
+                flattenContentDescriptions(rootNode, nodesContent)
+                val order = parseOrder(nodesContent)
+                val isOfferPopup = nodesContent.any { it.contains("Aceptar", ignoreCase = true) }
+                if (order.id != orderId || !isOfferPopup) continue
+
+                if (order.servicio.isEmpty()) {
+                    hideKmOverlay()
+                    val clicked = findAndClickCloseButton(rootNode)
+                    if (clicked) lastClosedId = orderId
+                    Log.i(TAG, "NO-CV: orden #$orderId sigue sin nodo Cruz Verde tras ${NON_CV_CLOSE_DELAY_MS} ms; overlay cerrado (click=$clicked) y no registrada.")
+                } else {
+                    Log.i(TAG, "NO-CV: orden #$orderId ya mostró el nodo Cruz Verde tras ${NON_CV_CLOSE_DELAY_MS} ms; se omite el cierre.")
+                }
+                break
+            }
+            picapWindows.forEach { it.recycle() }
+        } finally {
+            pendingCloseId = ""
+        }
     }
 
     /**

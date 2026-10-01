@@ -1,8 +1,8 @@
 {
   "lens": "reliability",
   "evidence": [
-    "Reviewed staged diff in MyAccessibilityService.kt: lastClosedId field, NO-CV close branch in processPicapWindow after the empty-id guard, and new findAndClickCloseButton plus collectImageViewCandidates helpers; build.gradle.kts version bump to 0.3.36",
-    "aapt dump badging reports com.example.projectacc versionCode 51 versionName 0.3.36; compileDebugKotlin succeeded with only pre-existing deprecation warnings (TabRow, Divider, geocoder)"
+    "Reviewed staged diff in MyAccessibilityService.kt: pendingCloseId field and NON_CV_CLOSE_DELAY_MS constant, NO-CV branch now schedules a main-thread Handler postDelayed instead of closing immediately, new closeNonCvPopup re-reads the rendered popup after 0.5 s before clicking the X; build.gradle.kts version bump to 0.3.37",
+    "aapt dump badging reports com.example.projectacc versionCode 52 versionName 0.3.37; compileDebugKotlin succeeded with only pre-existing deprecation warnings (TabRow, Divider, geocoder)"
   ],
   "findings": [
     {
@@ -10,7 +10,7 @@
       "lens": "reliability",
       "severity": "SUGGESTION",
       "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt findAndClickCloseButton picks the rightmost blank ImageView",
-      "claim": "The close button is located geometrically as the ImageView with blank contentDescription and text that is farthest right on screen. In the observed popup tree every other icon sits left of its text so the X wins, but a future Picap layout with a right-side icon could be clicked instead. The Aceptar-node guard limits the branch to service popups; if the heuristic misclicks the worst case is a harmless tap and a log line, and the log records the chosen bounds for diagnosis.",
+      "claim": "The close button is located geometrically as the ImageView with blank contentDescription and text that is farthest right on screen. In the observed popup tree every other icon sits left of its text so the X wins, but a future Picap layout with a right-side icon could be clicked instead. The Aceptar-node guard limits the branch to service popups; a misclick is a harmless tap and the CLOSE log records the chosen bounds for diagnosis.",
       "proof_refs": [
         "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt findAndClickCloseButton selects max bounds.right among candidates",
         "logcat CLOSE candidato X emits chosen right coordinate"
@@ -21,11 +21,11 @@
       "id": "rel-2",
       "lens": "reliability",
       "severity": "SUGGESTION",
-      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt:840 parseOrder servicio excludes address nodes",
-      "claim": "Non-Cruz-Verde detection reuses servicio, which only matches a non-address node containing cruz verde. If Picap ever renders a genuine Cruz Verde order whose only Cruz Verde text is the pickup or delivery address, servicio would be empty and the popup would be auto-closed as non-CV. This matches the reported behavior today (CV orders carry an isolated Cruz Verde service label) and the maintainer rule that absence of that node means not Cruz Verde, so the risk is accepted; the NO-CV log line makes any misclassification visible in logcat.",
+      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt closeNonCvPopup re-checks after NON_CV_CLOSE_DELAY_MS",
+      "claim": "Non-Cruz-Verde detection reuses servicio, which only matches a non-address node containing cruz verde. The 0.5 s re-check gives the popup time to render that node and skips the close when it appears, which removes the premature-close race. Residual risk: a Picap render slower than 0.5 s whose only Cruz Verde text is an address would still be closed as non-CV. The NO-CV log lines (scheduled, closed, or node-appeared) make any misclassification visible in logcat.",
       "proof_refs": [
-        "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt:840 servicio firstOrNull skips dirRec and dirEnt",
-        "NO-CV log line prints the closed order id"
+        "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt closeNonCvPopup parses the live tree after the delay",
+        "NO-CV log distinguishes closed versus node-appeared outcomes"
       ],
       "causal_disposition": "introduced"
     },
@@ -45,11 +45,11 @@
       "id": "rel-4",
       "lens": "reliability",
       "severity": "SUGGESTION",
-      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt lastClosedId dedupe skips retries after a successful click",
-      "claim": "lastClosedId is set only when the click returns true, so a failed click retries on the next event. If the click reports success but the popup does not actually close (for example a stale node), later events for the same id skip the close attempt and the popup stays open until the user dismisses it. This favors avoiding repeated clicks on an animating popup; recovery is manual and bounded to that one offer.",
+      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt pendingCloseId and lastClosedId retry protocol",
+      "claim": "pendingCloseId deduplicates timers so concurrent events schedule one close attempt per order id, and lastClosedId is set only on a successful click, so a failed click retries on the next event with a fresh 0.5 s window (bounded by popup lifetime). Residual case: a click that reports success while the popup fails to close leaves the offer open with no automatic retry, until the user dismisses it manually.",
       "proof_refs": [
-        "lastClosedId assigned only when findAndClickCloseButton returns true",
-        "branch returns false so window processing continues for other Picap windows"
+        "closeNonCvPopup resets pendingCloseId in a finally block",
+        "lastClosedId assigned only when findAndClickCloseButton returns true"
       ],
       "causal_disposition": "introduced"
     }
