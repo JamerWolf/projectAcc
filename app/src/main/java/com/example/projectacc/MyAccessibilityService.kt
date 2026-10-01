@@ -1501,12 +1501,11 @@ class MyAccessibilityService : AccessibilityService() {
      * En modo app la ventana es toda la pantalla de Picap, así que candidatos de
      * toda la ventana compiten contra la X (imágenes de lista, avatares, iconos),
      * y elegir "el más arriba" clickeó una imagen equivocada (click=true sin
-     * cerrar). Por eso la búsqueda se acota al subárbol del popup y se prioriza,
-     * en orden: (1) nodo con nombre de cierre explícito (close/cerrar/dismiss/
-     * descartar); (2) ImageView sin CD ni texto en la banda superior (40%) del
+     * cerrar). Por eso la búsqueda se acota al subárbol del popup sobre ImageView
+     * sin CD ni texto, priorizando en orden: (1) la banda superior (40%) del
      * popup, eligiendo primero el más clickeable y entre iguales el más a la
-     * derecha (la X vive en la esquina superior), empate → más arriba; (3) el
-     * mismo criterio sobre el popup completo; (4) toda la ventana con la regla
+     * derecha (la X vive en la esquina superior), empate → más arriba; (2) el
+     * mismo criterio sobre el popup completo; (3) toda la ventana con la regla
      * histórica. Retorna true si performAction devolvió true; el caller verifica
      * si el popup realmente desapareció.
      */
@@ -1518,25 +1517,7 @@ class MyAccessibilityService : AccessibilityService() {
         val scopeRect = Rect().also { (scope ?: rootNode).getBoundsInScreen(it) }
         val scopeLabel = if (scope != null) "popup" else "ventana"
 
-        // 1) Nombre de cierre explícito dentro del popup
-        val named = scope?.let {
-            findFirstNodeMatching(it) { s ->
-                val l = s.lowercase()
-                l.contains("close") || l.contains("cerrar") ||
-                    l.contains("dismiss") || l.contains("descartar")
-            }
-        }
-        if (named != null) {
-            val nr = Rect().also { named.getBoundsInScreen(it) }
-            Log.d(TAG, "CLOSE: nodo con nombre de cierre cd='${named.contentDescription}' text='${named.text}' bounds=$nr; clic directo.")
-            val ok = clickNode(named)
-            Log.d(TAG, "CLOSE: performAction(named)=$ok")
-            if (named !== rootNode && named !== scope) named.recycle()
-            scope.recycle()
-            return ok
-        }
-
-        // 2-4) Candidatos geométricos
+        // Candidatos geométricos
         val searchRoot: AccessibilityNodeInfo = scope ?: rootNode
         val all = mutableListOf<AccessibilityNodeInfo>()
         collectImageViewCandidates(searchRoot, all)
