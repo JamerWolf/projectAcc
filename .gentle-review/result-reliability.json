@@ -1,19 +1,19 @@
 {
   "lens": "reliability",
   "evidence": [
-    "Reviewed staged diff in MyAccessibilityService.kt: pendingCloseId field and NON_CV_CLOSE_DELAY_MS constant, NO-CV branch now schedules a main-thread Handler postDelayed instead of closing immediately, new closeNonCvPopup re-reads the rendered popup after 0.5 s before clicking the X; build.gradle.kts version bump to 0.3.37",
-    "aapt dump badging reports com.example.projectacc versionCode 52 versionName 0.3.37; compileDebugKotlin succeeded with only pre-existing deprecation warnings (TabRow, Divider, geocoder)"
+    "Reviewed staged diff in MyAccessibilityService.kt: findAndClickCloseButton now selects the close X by topmost-then-rightmost screen geometry instead of rightmost-only, and logs every blank ImageView candidate with top and right bounds; build.gradle.kts version bump to 0.3.38",
+    "aapt dump badging reports com.example.projectacc versionCode 53 versionName 0.3.38; compileDebugKotlin succeeded with only pre-existing deprecation warnings (TabRow, Divider, geocoder)"
   ],
   "findings": [
     {
       "id": "rel-1",
       "lens": "reliability",
       "severity": "SUGGESTION",
-      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt findAndClickCloseButton picks the rightmost blank ImageView",
-      "claim": "The close button is located geometrically as the ImageView with blank contentDescription and text that is farthest right on screen. In the observed popup tree every other icon sits left of its text so the X wins, but a future Picap layout with a right-side icon could be clicked instead. The Aceptar-node guard limits the branch to service popups; a misclick is a harmless tap and the CLOSE log records the chosen bounds for diagnosis.",
+      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt findAndClickCloseButton topmost-then-rightmost selection",
+      "claim": "The close X is located geometrically because the node order differs between the overlay variant (ImageView after the chip) and the app variant (ImageView before the chip). The new rule picks the topmost blank ImageView and, within that row, the rightmost, which matches both observed trees where the X sits in the header row and every other icon sits below it. Residual risk: an unobserved layout with a blank ImageView above the header would be picked instead; the log line listing every candidate with top and right bounds makes that diagnosable from logcat in one glance.",
       "proof_refs": [
-        "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt findAndClickCloseButton selects max bounds.right among candidates",
-        "logcat CLOSE candidato X emits chosen right coordinate"
+        "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt findAndClickCloseButton compares r.top first then r.right",
+        "logcat CLOSE candidatos ImageView sin CD lists all candidate bounds"
       ],
       "causal_disposition": "introduced"
     },
@@ -22,7 +22,7 @@
       "lens": "reliability",
       "severity": "SUGGESTION",
       "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt closeNonCvPopup re-checks after NON_CV_CLOSE_DELAY_MS",
-      "claim": "Non-Cruz-Verde detection reuses servicio, which only matches a non-address node containing cruz verde. The 0.5 s re-check gives the popup time to render that node and skips the close when it appears, which removes the premature-close race. Residual risk: a Picap render slower than 0.5 s whose only Cruz Verde text is an address would still be closed as non-CV. The NO-CV log lines (scheduled, closed, or node-appeared) make any misclassification visible in logcat.",
+      "claim": "Non-Cruz-Verde detection reuses servicio, which only matches a non-address node containing cruz verde. The 0.5 s re-check gives the popup time to render that node and skips the close when it appears, which removes the premature-close race. Residual risk: a Picap render slower than 0.5 s whose only Cruz Verde text is an address would still be closed as non-CV. The NO-CV log lines make any misclassification visible in logcat.",
       "proof_refs": [
         "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt closeNonCvPopup parses the live tree after the delay",
         "NO-CV log distinguishes closed versus node-appeared outcomes"
@@ -34,7 +34,7 @@
       "lens": "reliability",
       "severity": "SUGGESTION",
       "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt NO-CV branch runs before the auto-accept switch check",
-      "claim": "The close action is unconditional per the explicit request: non-CV popups are dismissed even when the Picap auto-accept master switch is off, so a user browsing manually will never see a non-CV offer. No data is registered and no accept click happens, so nothing irreversible occurs, but if browsing non-CV offers becomes desirable the branch will need a switch guard.",
+      "claim": "The close action is unconditional per the explicit request: non-CV popups are dismissed even when the Picap auto-accept master switch is off. No data is registered and no accept click happens, so nothing irreversible occurs, but if browsing non-CV offers becomes desirable the branch will need a switch guard.",
       "proof_refs": [
         "NO-CV branch placed before updateKmOverlay and before the isPicapAutoAcceptEnabled gate",
         "user request states close the overlay automatically when the service is not Cruz Verde"

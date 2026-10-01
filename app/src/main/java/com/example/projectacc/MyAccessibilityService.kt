@@ -1261,8 +1261,10 @@ class MyAccessibilityService : AccessibilityService() {
 
     /**
      * Busca el botón de cerrar (X) del popup y hace clic para descartar la oferta.
-     * La X es el ImageView sin contentDescription ni texto más a la derecha del
-     * popup (los demás iconos van a la izquierda de sus textos).
+     * El orden del árbol cambia según el modo (en overlay la X va después del chip,
+     * en modo app aparece antes), así que la selección es puramente geométrica:
+     * entre los ImageView sin contentDescription ni texto se elige el más arriba
+     * (fila de cabecera) y entre los de esa fila el más a la derecha.
      * Retorna true si logró hacer clic.
      */
     private fun findAndClickCloseButton(rootNode: AccessibilityNodeInfo?): Boolean {
@@ -1272,22 +1274,27 @@ class MyAccessibilityService : AccessibilityService() {
         collectImageViewCandidates(rootNode, candidates)
         if (candidates.isEmpty()) return false
 
-        // Elegir el ImageView vacío más a la derecha (bounds en coordenadas de pantalla)
         var best: AccessibilityNodeInfo? = null
+        var bestTop = Int.MAX_VALUE
         var bestRight = Int.MIN_VALUE
+        val candidatesDesc = StringBuilder()
         for (c in candidates) {
             val r = Rect()
             c.getBoundsInScreen(r)
-            if (r.right > bestRight) {
+            candidatesDesc.append("[top=").append(r.top)
+                .append(",right=").append(r.right).append("] ")
+            if (r.top < bestTop || (r.top == bestTop && r.right > bestRight)) {
+                bestTop = r.top
                 bestRight = r.right
                 best = c
             }
         }
+        Log.d(TAG, "CLOSE: candidatos ImageView sin CD: $candidatesDesc")
 
         var clicked = false
         val target = best
         if (target != null) {
-            Log.d(TAG, "CLOSE: candidato X en bounds right=$bestRight className=${target.className}")
+            Log.d(TAG, "CLOSE: candidato X en bounds top=$bestTop right=$bestRight className=${target.className}")
             if (target.isClickable) {
                 clicked = target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
             } else {
