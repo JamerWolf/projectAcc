@@ -1,20 +1,19 @@
 {
   "lens": "reliability",
   "evidence": [
-    "Reviewed staged diff in MyAccessibilityService.kt: removed the lastClosedId closed-id blacklist entirely (field, branch guard ya cerrada previamente, assignment after verified close, KDoc reference) so the NO-CV branch schedules a close on every appearance of an offer popup without a Cruz Verde service node; the only remaining dedupe is pendingCloseId, which guards a single in-flight 500 ms timer and is released by the coroutine, so a reappearance of the same service id after a completed close is scheduled and closed again; build.gradle.kts version bump to 0.3.43",
-    "aapt dump badging reports com.example.projectacc versionCode 58 versionName 0.3.43; compileDebugKotlin succeeded with no new warnings; grep confirms zero remaining references to lastClosedId or ya cerrada previamente in MyAccessibilityService.kt"
+    "Reviewed staged diff in MyAccessibilityService.kt: added an adaptive Picap event throttle at the top of onAccessibilityEvent - picapEventAllowed() maintains a 1-second sliding window over every Picap event arrival (including discarded ones), enters throttled mode when a window exceeds PICAP_FLOOD_HIGH (8 events/s), processes at most one Picap event per PICAP_THROTTLE_MIN_INTERVAL_MS (1000 ms) while throttled, and exits back to full processing only when a complete window falls to PICAP_FLOOD_LOW (4 events/s or fewer), logging both transitions and the number of discarded events; non-Picap events are completely unaffected; build.gradle.kts version bump to 0.3.44",
+    "aapt dump badging reports com.example.projectacc versionCode 59 versionName 0.3.44; compileDebugKotlin succeeded with no new warnings"
   ],
   "findings": [
     {
       "id": "rel-1",
       "lens": "reliability",
       "severity": "SUGGESTION",
-      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt NO-CV branch and attemptNonCvClose scheduling",
-      "claim": "Removing lastClosedId satisfies the product rule that a non-Cruz-Verde offer always closes, including reappearance of a previously closed service id. The residual dedupe pendingCloseId only blocks while its 500 ms timer coroutine is running; the coroutine clears it on every terminal outcome (CLOSED, CV_RENDERED, NO_POPUP, NO_OFFER, CLICK_FAILED, exception), so no permanent blacklist can form. The remaining failure mode is a non-closing popup: retries stop after three attempts within one appearance, but every later event with Aceptar reschedules because nothing remembers prior attempts, which can produce repeated click attempts on a stuck popup until the user dismisses it or the CV node renders; those attempts are no-ops when the X is absent and are logged individually.",
+      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt picapEventAllowed flood window and hysteresis",
+      "claim": "Flood detection uses a 1-second window with enter above 8 events/s and exit at or below 4 events/s, giving hysteresis that prevents flapping between states; both transitions emit a single Log.i with the rate and drop count. A sustained rate between 5 and 8 events/s after a flood would keep the throttle active indefinitely because it never crosses the exit threshold, and a bursty pattern (quiet second then flood) will log an exit/enter pair per cycle; both outcomes are functionally safe because throttled processing still runs once per second and every transition is visible in logcat, and the thresholds are named constants that can be tuned per device.",
       "proof_refs": [
-        "branch now only checks order.id == pendingCloseId before scheduleNonCvClose; no id-based permanent skip remains",
-        "grep lastClosedId and ya cerrada previamente returns no matches in MyAccessibilityService.kt",
-        "picapOfferStillVisible verification and NonCvCloseOutcome retry loop unchanged from v0.3.42"
+        "picapEventAllowed evaluates exit only at window rollover using the completed window count before resetting picapFloodCount",
+        "enter check runs after every increment so a burst triggers throttling mid-window without waiting for rollover"
       ],
       "causal_disposition": "introduced"
     },
@@ -22,11 +21,11 @@
       "id": "rel-2",
       "lens": "reliability",
       "severity": "SUGGESTION",
-      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt pendingCloseId lifecycle",
-      "claim": "pendingCloseId is the sole guard against timer duplication for a reappearance of the same id while an earlier timer is still pending. If a new offer window for the same id appears within the 500 ms window after the timer fired and the coroutine already reset pendingCloseId, a second timer is scheduled harmlessly; if it appears before the coroutine resets it, scheduling is skipped by that event but the running coroutine still re-reads windows and closes the current popup under the service-node rule, so the close is not lost. On exception paths scheduleNonCvClose resets pendingCloseId inside the finally block, so a crash in the coroutine cannot leave a stuck guard.",
+      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt onAccessibilityEvent early return placement",
+      "claim": "Throttled Picap events return before the EVENT_DEBUG log and logWindows() dump, which is the intended load reduction; discarded events produce no per-event log line to avoid replacing the flood with a log flood, so visibility during throttling is limited to the entry/exit Log.i messages and the drop count they carry. The throttle check reads event.packageName before the existing null checks, so a null event or null package falls through to the original code path unchanged. The WhatsApp and system-package paths are byte-for-byte untouched, and the Picap pipeline is tree-re-read based (handlePicapEvent calls findAllWindows) so dropping intermediate events cannot lose state - only detection latency, bounded by the 1000 ms interval, changes.",
       "proof_refs": [
-        "scheduleNonCvClose resets pendingCloseId in the finally block and on each terminal outcome",
-        "attemptNonCvClose decides by servicio emptiness on every re-read rather than by id equality with a stored value"
+        "guard condition event?.packageName?.toString() == PACKAGE_PICAP && !picapEventAllowed() placed as first statement of onAccessibilityEvent",
+        "handlePicapEvent starts with findAllWindows(PACKAGE_PICAP) and parses the fresh tree rather than the event payload"
       ],
       "causal_disposition": "introduced"
     }
