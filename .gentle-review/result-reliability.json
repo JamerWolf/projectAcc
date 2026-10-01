@@ -1,19 +1,19 @@
 {
   "lens": "reliability",
   "evidence": [
-    "Reviewed staged diff in MyAccessibilityService.kt: findAndClickCloseButton now selects the close X by topmost-then-rightmost screen geometry instead of rightmost-only, and logs every blank ImageView candidate with top and right bounds; build.gradle.kts version bump to 0.3.38",
-    "aapt dump badging reports com.example.projectacc versionCode 53 versionName 0.3.38; compileDebugKotlin succeeded with only pre-existing deprecation warnings (TabRow, Divider, geocoder)"
+    "Reviewed staged diff in MyAccessibilityService.kt: handlePicapEvent now logs event type and window count (including the empty-windows path), the percentage filter no longer discards offer popups (ID plus Aceptar markers) and logs every skip or bypass decision, processPicapWindow logs the empty-id path, and a final no-new-order log closes each pass; build.gradle.kts version bump to 0.3.39",
+    "aapt dump badging reports com.example.projectacc versionCode 54 versionName 0.3.39; compileDebugKotlin succeeded with only pre-existing deprecation warnings (TabRow, Divider, geocoder)"
   ],
   "findings": [
     {
       "id": "rel-1",
       "lens": "reliability",
       "severity": "SUGGESTION",
-      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt findAndClickCloseButton topmost-then-rightmost selection",
-      "claim": "The close X is located geometrically because the node order differs between the overlay variant (ImageView after the chip) and the app variant (ImageView before the chip). The new rule picks the topmost blank ImageView and, within that row, the rightmost, which matches both observed trees where the X sits in the header row and every other icon sits below it. Residual risk: an unobserved layout with a blank ImageView above the header would be picked instead; the log line listing every candidate with top and right bounds makes that diagnosable from logcat in one glance.",
+      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt percentage filter bypass for offer popups",
+      "claim": "The percentage filter previously skipped any window whose percent node was lower than the last seen value, with no log, and in app mode the offer lives inside the main Picap window whose percent can be lower, which silenced all processing (reported symptom: no logs in app mode while overlay mode worked). Offer popups identified by ID and Aceptar markers now bypass the skip; only non-popup windows (list bars) remain subject to it. Consequence: a genuinely regressed offer popup is now processed (registered, filtered, or closed) instead of ignored, which is the intended product behavior.",
       "proof_refs": [
-        "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt findAndClickCloseButton compares r.top first then r.right",
-        "logcat CLOSE candidatos ImageView sin CD lists all candidate bounds"
+        "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt percentage branch builds markers and checks ID plus Aceptar before continuing",
+        "logcat PICAP porcentaje lines distinguish bypassed versus skipped windows"
       ],
       "causal_disposition": "introduced"
     },
@@ -21,11 +21,11 @@
       "id": "rel-2",
       "lens": "reliability",
       "severity": "SUGGESTION",
-      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt closeNonCvPopup re-checks after NON_CV_CLOSE_DELAY_MS",
-      "claim": "Non-Cruz-Verde detection reuses servicio, which only matches a non-address node containing cruz verde. The 0.5 s re-check gives the popup time to render that node and skips the close when it appears, which removes the premature-close race. Residual risk: a Picap render slower than 0.5 s whose only Cruz Verde text is an address would still be closed as non-CV. The NO-CV log lines make any misclassification visible in logcat.",
+      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt handlePicapEvent per-event logging",
+      "claim": "Every Picap accessibility event now emits an entry log with event type and window count plus a final no-new-order log, and every percentage decision emits a line. This adds logcat volume proportional to event rate. The instrumentation exists to pinpoint why app-mode events produced no output; once confirmed on device these lines can be downgraded or removed without affecting behavior.",
       "proof_refs": [
-        "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt closeNonCvPopup parses the live tree after the delay",
-        "NO-CV log distinguishes closed versus node-appeared outcomes"
+        "handlePicapEvent logs evento tipo and ventana(s) before the window loop",
+        "sin orden nueva log prints only when no window returns true"
       ],
       "causal_disposition": "introduced"
     },
@@ -33,23 +33,11 @@
       "id": "rel-3",
       "lens": "reliability",
       "severity": "SUGGESTION",
-      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt NO-CV branch runs before the auto-accept switch check",
-      "claim": "The close action is unconditional per the explicit request: non-CV popups are dismissed even when the Picap auto-accept master switch is off. No data is registered and no accept click happens, so nothing irreversible occurs, but if browsing non-CV offers becomes desirable the branch will need a switch guard.",
+      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt isOfferPopup marker detection",
+      "claim": "The popup detection that protects windows from the percentage skip relies on a flattened node starting with the literal ID prefix and another containing Aceptar. If Picap changes the id format or button label, the marker check fails closed: behavior reverts to the previous skip (with the new skip log line making it visible) rather than clicking anything wrong. The risk is a silent loss of the bypass, not a misaction.",
       "proof_refs": [
-        "NO-CV branch placed before updateKmOverlay and before the isPicapAutoAcceptEnabled gate",
-        "user request states close the overlay automatically when the service is not Cruz Verde"
-      ],
-      "causal_disposition": "introduced"
-    },
-    {
-      "id": "rel-4",
-      "lens": "reliability",
-      "severity": "SUGGESTION",
-      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt pendingCloseId and lastClosedId retry protocol",
-      "claim": "pendingCloseId deduplicates timers so concurrent events schedule one close attempt per order id, and lastClosedId is set only on a successful click, so a failed click retries on the next event with a fresh 0.5 s window (bounded by popup lifetime). Residual case: a click that reports success while the popup fails to close leaves the offer open with no automatic retry, until the user dismisses it manually.",
-      "proof_refs": [
-        "closeNonCvPopup resets pendingCloseId in a finally block",
-        "lastClosedId assigned only when findAndClickCloseButton returns true"
+        "markers.any startsWith ID prefix combined with markers.any contains Aceptar",
+        "skip path logs ventana omitida por porcentaje for diagnosis"
       ],
       "causal_disposition": "introduced"
     }

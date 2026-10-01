@@ -284,9 +284,11 @@ class MyAccessibilityService : AccessibilityService() {
         val picapWindows = findAllWindows(PACKAGE_PICAP)
         if (picapWindows.isEmpty()) {
             // Sin ventanas de Picap visibles: el popup de servicio ya no existe
+            Log.d(TAG, "PICAP: evento tipo=${event.eventType} sin ventanas visibles; se ignora.")
             hideKmOverlay()
             return
         }
+        Log.d(TAG, "PICAP: evento tipo=${event.eventType} con ${picapWindows.size} ventana(s).")
 
         // --- MODO AUTO-CLIC EN LISTA ---
         if (OrderStateManager.isAutoClickEnabled.value) {
@@ -307,11 +309,26 @@ class MyAccessibilityService : AccessibilityService() {
             // Lógica de filtrado por porcentaje:
             if (currentPercentage != null) {
                 if (currentPercentage < lastPercentage) {
+                    val prevPercentage = lastPercentage
                     lastPercentage = currentPercentage
-                    rootNode.recycle()
-                    continue
+                    // Un popup de oferta real (ID + Aceptar) jamás se descarta por
+                    // porcentaje: en modo app el popup vive dentro de la ventana
+                    // principal de Picap y su porcentaje puede ser menor al último
+                    // visto, lo que silenciaba todo el procesamiento de la oferta.
+                    val markers = mutableListOf<String>()
+                    flattenContentDescriptions(rootNode, markers)
+                    val isOfferPopup = markers.any { it.startsWith("ID: ") } &&
+                            markers.any { it.contains("Aceptar") }
+                    if (isOfferPopup) {
+                        Log.i(TAG, "PICAP: porcentaje $currentPercentage < previo $prevPercentage pero es popup de oferta; se procesa igual.")
+                    } else {
+                        Log.i(TAG, "PICAP: ventana omitida por porcentaje ($currentPercentage < previo $prevPercentage).")
+                        rootNode.recycle()
+                        continue
+                    }
+                } else {
+                    lastPercentage = currentPercentage
                 }
-                lastPercentage = currentPercentage
             } else {
                 lastPercentage = -1
             }
@@ -323,6 +340,7 @@ class MyAccessibilityService : AccessibilityService() {
             }
             rootNode.recycle()
         }
+        Log.d(TAG, "PICAP: sin orden nueva en esta pasada (tipo=${event.eventType}).")
     }
 
     /**
@@ -341,6 +359,7 @@ class MyAccessibilityService : AccessibilityService() {
         // Si no hay ID, no es una orden válida
         if (order.id.isEmpty()) {
             hideKmOverlay()
+            Log.d(TAG, "PICAP: ventana sin ID de orden; no se procesa (servicio='${order.servicio}').")
             return false
         }
 
