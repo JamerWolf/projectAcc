@@ -1,19 +1,20 @@
 {
   "lens": "reliability",
   "evidence": [
-    "Reviewed staged diff in MyAccessibilityService.kt: findAndClickCloseButton now scopes candidate search to the popup subtree (findPopupContainer ascends from the Aceptar node to the outermost inset ancestor containing an ID node), prefers an explicitly named close node (close/cerrar/dismiss/descartar), then selects within the top 40 percent band of the popup preferring clickable candidates and the rightmost position, logging full bounds, clickable rank, and view id for every candidate; attemptNonCvClose verifies after a 300 ms delay that the offer popup actually disappeared before setting lastClosedId (picapOfferStillVisible), retries otherwise; build.gradle.kts version bump to 0.3.42",
-    "aapt dump badging reports com.example.projectacc versionCode 57 versionName 0.3.42; compileDebugKotlin succeeded with only pre-existing deprecation warnings (TabRow, Divider, geocoder)"
+    "Reviewed staged diff in MyAccessibilityService.kt: removed the lastClosedId closed-id blacklist entirely (field, branch guard ya cerrada previamente, assignment after verified close, KDoc reference) so the NO-CV branch schedules a close on every appearance of an offer popup without a Cruz Verde service node; the only remaining dedupe is pendingCloseId, which guards a single in-flight 500 ms timer and is released by the coroutine, so a reappearance of the same service id after a completed close is scheduled and closed again; build.gradle.kts version bump to 0.3.43",
+    "aapt dump badging reports com.example.projectacc versionCode 58 versionName 0.3.43; compileDebugKotlin succeeded with no new warnings; grep confirms zero remaining references to lastClosedId or ya cerrada previamente in MyAccessibilityService.kt"
   ],
   "findings": [
     {
       "id": "rel-1",
       "lens": "reliability",
       "severity": "SUGGESTION",
-      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt findAndClickCloseButton popup scoping and selection stages",
-      "claim": "The v0.3.41 device log showed the geometric topmost rule selected an ImageView at top=558 right=440 from eight candidates spanning the whole app window, performAction returned true, and the popup stayed open; in app mode the window is the entire Picap screen so list images and avatars competed with the close button. The new selection runs in four stages (named close node, top-40-percent band of the popup subtree, full popup, whole window fallback) and prefers clickable then rightmost. Consequence: the click targets the popup header corner instead of arbitrary window imagery, but if the popup layout puts the X outside the computed band or the popup container heuristic fails, the fallback stages can still select a wrong image; the full per-candidate bounds log makes any miss diagnosable from one logcat run, and the post-click verification prevents a wrong click from being recorded as closed.",
+      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt NO-CV branch and attemptNonCvClose scheduling",
+      "claim": "Removing lastClosedId satisfies the product rule that a non-Cruz-Verde offer always closes, including reappearance of a previously closed service id. The residual dedupe pendingCloseId only blocks while its 500 ms timer coroutine is running; the coroutine clears it on every terminal outcome (CLOSED, CV_RENDERED, NO_POPUP, NO_OFFER, CLICK_FAILED, exception), so no permanent blacklist can form. The remaining failure mode is a non-closing popup: retries stop after three attempts within one appearance, but every later event with Aceptar reschedules because nothing remembers prior attempts, which can produce repeated click attempts on a stuck popup until the user dismisses it or the CV node renders; those attempts are no-ops when the X is absent and are logged individually.",
       "proof_refs": [
-        "device logcat CLOSE candidatos list shows eight window-wide candidates and the chosen one at top=558 right=440 with click=true but popup remaining",
-        "findPopupContainer ascends from the Aceptar node stopping at full-screen layouts and picks the outermost inset ancestor containing an ID node"
+        "branch now only checks order.id == pendingCloseId before scheduleNonCvClose; no id-based permanent skip remains",
+        "grep lastClosedId and ya cerrada previamente returns no matches in MyAccessibilityService.kt",
+        "picapOfferStillVisible verification and NonCvCloseOutcome retry loop unchanged from v0.3.42"
       ],
       "causal_disposition": "introduced"
     },
@@ -21,23 +22,11 @@
       "id": "rel-2",
       "lens": "reliability",
       "severity": "SUGGESTION",
-      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt post-click verification and lastClosedId gating",
-      "claim": "Previously lastClosedId was set on performAction=true alone, which blocked all further scheduling for that id while the popup was still open (observed as ya cerrada previamente on the next events). Now the coroutine waits 300 ms and re-reads the windows (picapOfferStillVisible requires both an ID node and an Aceptar node); only a vanished popup sets lastClosedId and returns CLOSED, while a surviving popup returns CLICK_FAILED so the retry loop runs again. A false CLOSED is possible if the offer window is momentarily unreadable at verification time, and a false CLICK_FAILED would re-click a successfully closed popup, which degrades to a no-op because the later pass finds no offer window.",
+      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt pendingCloseId lifecycle",
+      "claim": "pendingCloseId is the sole guard against timer duplication for a reappearance of the same id while an earlier timer is still pending. If a new offer window for the same id appears within the 500 ms window after the timer fired and the coroutine already reset pendingCloseId, a second timer is scheduled harmlessly; if it appears before the coroutine resets it, scheduling is skipped by that event but the running coroutine still re-reads windows and closes the current popup under the service-node rule, so the close is not lost. On exception paths scheduleNonCvClose resets pendingCloseId inside the finally block, so a crash in the coroutine cannot leave a stuck guard.",
       "proof_refs": [
-        "attemptNonCvClose calls delay(300) then picapOfferStillVisible before assigning lastClosedId",
-        "device logcat showed lastClosedId set after a non-closing click, blocking retries with ya cerrada previamente"
-      ],
-      "causal_disposition": "introduced"
-    },
-    {
-      "id": "rel-3",
-      "lens": "reliability",
-      "severity": "SUGGESTION",
-      "location": "app/src/main/java/com/example/projectacc/MyAccessibilityService.kt node traversal helpers and recycling",
-      "claim": "findFirstNodeMatching and findPopupContainer traverse with getChild and parent, returning nodes owned by the caller while recycling discarded descendants and chain members; the full-screen ancestor is recycled only as a fresh parent instance and never the caller-owned rootNode. The recycling discipline is easy to regress: recycling the returned popup container before the click, or recycling a node that candidates still reference, would invalidate nodes mid-use. The code order (collect, click, then recycle) keeps the window roots alive until attemptNonCvClose finishes, and a mistake would surface as an IllegalStateException in logcat rather than a silent wrong click.",
-      "proof_refs": [
-        "named branch clicks and logs before recycling named and scope",
-        "geometry branch collects from searchRoot and recycles all only after clickNode returns"
+        "scheduleNonCvClose resets pendingCloseId in the finally block and on each terminal outcome",
+        "attemptNonCvClose decides by servicio emptiness on every re-read rather than by id equality with a stored value"
       ],
       "causal_disposition": "introduced"
     }

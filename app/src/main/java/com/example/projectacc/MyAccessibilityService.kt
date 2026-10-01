@@ -104,9 +104,6 @@ class MyAccessibilityService : AccessibilityService() {
 
     // Almacena la última orden detectada para evitar duplicados por ID
     private var lastOrder: PicapOrder? = null
-    // ID de la última orden no-Cruz-Verde cerrada (evita repetir el clic en la X).
-    // Volatile: se escribe desde la coroutine del cierre y se lee desde los eventos.
-    @Volatile private var lastClosedId: String = ""
     // ID de la orden no-CV con cierre agendado (evita duplicar el timer de 500 ms).
     // Volatile: se escribe en el evento y se lee/libera desde la coroutine.
     @Volatile private var pendingCloseId: String = ""
@@ -369,17 +366,15 @@ class MyAccessibilityService : AccessibilityService() {
         // --- NO CRUZ VERDE: sin el nodo de servicio "Cruz Verde ..." (servicio vacío)
         // y con estructura de popup de oferta → agendar el cierre en 500 ms (tiempo de
         // render) y NO registrar la orden en la tarjeta ni en el historial.
+        // Regla de producto: si no es Cruz Verde SIEMPRE se cierra; no se memorizan
+        // ids de servicios ya cerrados (una oferta que reaparezca se vuelve a cerrar).
         if (order.servicio.isEmpty() && nodesContent.any { it.contains("Aceptar", ignoreCase = true) }) {
-            when {
-                order.id == lastClosedId ->
-                    Log.d(TAG, "NO-CV: orden #${order.id} ya cerrada previamente; no se re-agenda.")
-                order.id == pendingCloseId ->
-                    Log.d(TAG, "NO-CV: orden #${order.id} ya tiene timer activo (pending=$pendingCloseId); no se re-agenda.")
-                else -> {
-                    pendingCloseId = order.id
-                    Log.i(TAG, "NO-CV: orden #${order.id} sin nodo Cruz Verde; cierre agendado en ${NON_CV_CLOSE_DELAY_MS} ms (serviceScope).")
-                    scheduleNonCvClose(order.id)
-                }
+            if (order.id == pendingCloseId) {
+                Log.d(TAG, "NO-CV: orden #${order.id} ya tiene timer activo (pending=$pendingCloseId); no se re-agenda.")
+            } else {
+                pendingCloseId = order.id
+                Log.i(TAG, "NO-CV: orden #${order.id} sin nodo Cruz Verde; cierre agendado en ${NON_CV_CLOSE_DELAY_MS} ms (serviceScope).")
+                scheduleNonCvClose(order.id)
             }
             return false
         }
@@ -1293,7 +1288,8 @@ class MyAccessibilityService : AccessibilityService() {
      * Dispatchers.Default; hideKmOverlay se postea al main porque usa WindowManager.
      * performAction=true NO garantiza que se clickeó la X correcta: tras el clic
      * se espera 300 ms y se verifica que el popup haya desaparecido antes de dar
-     * la orden por cerrada (lastClosedId solo se setea con cierre verificado).
+     * la orden por cerrada (no se memorizan ids: si la misma oferta reaparece,
+     * la rama NO-CV la vuelve a agendar y a cerrar).
      */
     private suspend fun attemptNonCvClose(orderId: String, attempt: Int, maxAttempts: Int): NonCvCloseOutcome {
         val picapWindows = try {
@@ -1333,7 +1329,6 @@ class MyAccessibilityService : AccessibilityService() {
                 Log.i(TAG, "NO-CV: click=true pero el popup de #$orderId sigue visible tras 300 ms; se reintenta.")
                 return NonCvCloseOutcome.CLICK_FAILED
             }
-            lastClosedId = orderId
             Log.i(TAG, "NO-CV: orden #$orderId cerrada y verificada (popup desaparecio); no registrada.")
             return NonCvCloseOutcome.CLOSED
         }
