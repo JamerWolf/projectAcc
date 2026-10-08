@@ -33,6 +33,9 @@ object OrderStateManager {
     private const val KEY_WHATSAPP_AUTO_ACCEPT_DELAY_MS = "whatsapp_auto_accept_delay_ms"
     private const val KEY_PICAP_AUTO_ACCEPT_ENABLED = "picap_auto_accept_enabled"
     private const val KEY_PICAP_AUTO_ACCEPT_FILTER = "picap_auto_accept_filter"
+    private const val KEY_PICAP_AUTO_ACCEPT_TYPE_COND1 = "picap_auto_accept_type_cond1"
+    private const val KEY_PICAP_AUTO_ACCEPT_TYPE_COND2 = "picap_auto_accept_type_cond2"
+    private const val KEY_PICAP_AUTO_ACCEPT_TYPE_COND3 = "picap_auto_accept_type_cond3"
     private const val KEY_PLATE_REQUEST_PHRASES = "plate_request_phrases"
     private const val KEY_ALLOWED_PLATE_SENDERS = "allowed_plate_senders"
 
@@ -64,6 +67,9 @@ object OrderStateManager {
         _whatsappAutoAcceptDelayMs.value = p.getLong(KEY_WHATSAPP_AUTO_ACCEPT_DELAY_MS, 0L)
         _isPicapAutoAcceptEnabled.value = p.getBoolean(KEY_PICAP_AUTO_ACCEPT_ENABLED, false)
         _picapAutoAcceptFilter.value = p.getString(KEY_PICAP_AUTO_ACCEPT_FILTER, "TODOS") ?: "TODOS"
+        _picapAutoAcceptTypeCond1.value = p.getString(KEY_PICAP_AUTO_ACCEPT_TYPE_COND1, "TODOS") ?: "TODOS"
+        _picapAutoAcceptTypeCond2.value = p.getString(KEY_PICAP_AUTO_ACCEPT_TYPE_COND2, "TODOS") ?: "TODOS"
+        _picapAutoAcceptTypeCond3.value = p.getString(KEY_PICAP_AUTO_ACCEPT_TYPE_COND3, "TODOS") ?: "TODOS"
         _plateRequestPhrases.value = loadStringList(KEY_PLATE_REQUEST_PHRASES, listOf("envíame la placa de tu vehículo", "enviame la placa de tu vehiculo"))
         _allowedPlateSenders.value = loadStringList(KEY_ALLOWED_PLATE_SENDERS, listOf("+57 350 7867814", "Te St", "+57 316 6904939"))
     }
@@ -340,6 +346,32 @@ object OrderStateManager {
     fun setPicapAutoAcceptFilter(filter: String) {
         _picapAutoAcceptFilter.value = filter
         prefs?.edit()?.putString(KEY_PICAP_AUTO_ACCEPT_FILTER, filter)?.apply()
+    }
+
+    // Tipo de pedido por condición de auto-aceptación Picap (selector bajo cada condición)
+    // Valores: "OMS" | "MOSTRADOR" | "TRASLADO" | "TODOS"
+    private val _picapAutoAcceptTypeCond1 = MutableStateFlow("TODOS")
+    val picapAutoAcceptTypeCond1: StateFlow<String> = _picapAutoAcceptTypeCond1.asStateFlow()
+
+    fun setPicapAutoAcceptTypeCond1(type: String) {
+        _picapAutoAcceptTypeCond1.value = type
+        prefs?.edit()?.putString(KEY_PICAP_AUTO_ACCEPT_TYPE_COND1, type)?.apply()
+    }
+
+    private val _picapAutoAcceptTypeCond2 = MutableStateFlow("TODOS")
+    val picapAutoAcceptTypeCond2: StateFlow<String> = _picapAutoAcceptTypeCond2.asStateFlow()
+
+    fun setPicapAutoAcceptTypeCond2(type: String) {
+        _picapAutoAcceptTypeCond2.value = type
+        prefs?.edit()?.putString(KEY_PICAP_AUTO_ACCEPT_TYPE_COND2, type)?.apply()
+    }
+
+    private val _picapAutoAcceptTypeCond3 = MutableStateFlow("TODOS")
+    val picapAutoAcceptTypeCond3: StateFlow<String> = _picapAutoAcceptTypeCond3.asStateFlow()
+
+    fun setPicapAutoAcceptTypeCond3(type: String) {
+        _picapAutoAcceptTypeCond3.value = type
+        prefs?.edit()?.putString(KEY_PICAP_AUTO_ACCEPT_TYPE_COND3, type)?.apply()
     }
 
     // Plate request phrases (exact phrases that trigger auto-plate sending)

@@ -30,6 +30,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -69,6 +72,9 @@ fun SettingsScreen(
     val autoAcceptMaxKmCond2 by OrderStateManager.autoAcceptMaxKmCond2.collectAsState()
     val isAutoAcceptByKmEnabled by OrderStateManager.isAutoAcceptByKmEnabled.collectAsState()
     val autoAcceptMaxKm by OrderStateManager.autoAcceptMaxKm.collectAsState()
+    val picapAutoAcceptTypeCond1 by OrderStateManager.picapAutoAcceptTypeCond1.collectAsState()
+    val picapAutoAcceptTypeCond2 by OrderStateManager.picapAutoAcceptTypeCond2.collectAsState()
+    val picapAutoAcceptTypeCond3 by OrderStateManager.picapAutoAcceptTypeCond3.collectAsState()
 
     var ganancia1Input by remember { mutableStateOf(autoAcceptMinGanancia1.toInt().toString()) }
     var ganancia2Input by remember { mutableStateOf(autoAcceptMinGanancia2.toInt().toString()) }
@@ -244,6 +250,12 @@ fun SettingsScreen(
             fontSize = 11.sp
         )
 
+        Spacer(modifier = Modifier.height(8.dp))
+        OrderTypeSelector(
+            selected = picapAutoAcceptTypeCond1,
+            onSelect = { OrderStateManager.setPicapAutoAcceptTypeCond1(it) }
+        )
+
         Spacer(modifier = Modifier.height(12.dp))
 
         OutlinedTextField(
@@ -276,6 +288,12 @@ fun SettingsScreen(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 11.sp
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+        OrderTypeSelector(
+            selected = picapAutoAcceptTypeCond2,
+            onSelect = { OrderStateManager.setPicapAutoAcceptTypeCond2(it) }
         )
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -322,6 +340,11 @@ fun SettingsScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 11.sp
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            OrderTypeSelector(
+                selected = picapAutoAcceptTypeCond3,
+                onSelect = { OrderStateManager.setPicapAutoAcceptTypeCond3(it) }
             )
         }
 
@@ -574,5 +597,56 @@ fun SettingsScreen(
         }
 
         Spacer(modifier = Modifier.height(24.dp))
+    }
+}
+
+/**
+ * Selector de tipo de pedido para cada condición de auto-aceptación Picap.
+ * Repite el patrón visual del filtro global (SingleChoiceSegmentedButtonRow) en MainActivity.
+ */
+@Composable
+private fun OrderTypeSelector(
+    selected: String,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        Text(
+            text = "Tipo de pedido",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 11.sp
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            SegmentedButton(
+                selected = selected == "OMS",
+                onClick = { onSelect("OMS") },
+                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 4)
+            ) {
+                Text(text = "OMS")
+            }
+            SegmentedButton(
+                selected = selected == "MOSTRADOR",
+                onClick = { onSelect("MOSTRADOR") },
+                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 4)
+            ) {
+                Text(text = "Mostrador")
+            }
+            SegmentedButton(
+                selected = selected == "TRASLADO",
+                onClick = { onSelect("TRASLADO") },
+                shape = SegmentedButtonDefaults.itemShape(index = 2, count = 4)
+            ) {
+                Text(text = "Traslado")
+            }
+            SegmentedButton(
+                selected = selected == "TODOS",
+                onClick = { onSelect("TODOS") },
+                shape = SegmentedButtonDefaults.itemShape(index = 3, count = 4)
+            ) {
+                Text(text = "Todos")
+            }
+        }
     }
 }
