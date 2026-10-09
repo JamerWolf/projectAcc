@@ -8,8 +8,6 @@ import android.os.Looper
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
-import com.example.projectacc.eval.AutoAcceptConfig
-import com.example.projectacc.eval.evaluateAutoAccept
 import com.example.projectacc.floating.FloatingPopupManager
 import com.example.projectacc.parser.WhatsAppParser
 
@@ -145,21 +143,21 @@ class NotificationInterceptorService : NotificationListenerService() {
             OrderStateManager.setWhatsAppOrder(service)
             OrderStateManager.addScannedWhatsAppServiceId(service.id)
 
-            // Check if service meets auto-accept conditions (shared evaluator, same as WhatsAppResponder)
+            // Check if service meets auto-accept conditions
             val valor = service.extractValor() ?: 0
-            val config = AutoAcceptConfig(
-                OrderStateManager.whatsappAutoAcceptMinGanancia1.value.toInt(),
-                OrderStateManager.whatsappAutoAcceptMinGanancia2.value.toInt(),
-                OrderStateManager.whatsappAutoAcceptMaxKmCond2.value,
-                OrderStateManager.isWhatsappAutoAcceptByKmEnabled.value,
-                OrderStateManager.whatsappAutoAcceptMaxKm.value,
-            )
+            val minGanancia1 = OrderStateManager.whatsappAutoAcceptMinGanancia1.value
+            val minGanancia2 = OrderStateManager.whatsappAutoAcceptMinGanancia2.value
+            val maxKmCond2 = OrderStateManager.whatsappAutoAcceptMaxKmCond2.value
+            val isKmEnabled = OrderStateManager.isWhatsappAutoAcceptByKmEnabled.value
+            val maxKm = OrderStateManager.whatsappAutoAcceptMaxKm.value
 
             // Extract km from origen
             val match = Regex("([\\d.,]+)\\s*km", RegexOption.IGNORE_CASE).find(service.origen)
             val kmRecogida = match?.groupValues?.get(1)?.replace(",", ".")?.toDoubleOrNull()
 
-            val meetsConditions = evaluateAutoAccept(valor, kmRecogida ?: 999.0, config).accepted
+            val meetsConditions = valor >= minGanancia1 ||
+                (kmRecogida != null && kmRecogida <= maxKmCond2 && valor >= minGanancia2) ||
+                (isKmEnabled && kmRecogida != null && (maxKm >= 5.0 || kmRecogida <= maxKm))
 
             Log.d(TAG, "AUTO-SERVICIO: valor=$valor, km=$kmRecogida, meetsConditions=$meetsConditions")
 

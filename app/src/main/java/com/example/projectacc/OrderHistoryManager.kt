@@ -2,7 +2,6 @@ package com.example.projectacc
 
 import android.content.Context
 import android.util.Log
-import com.example.projectacc.model.PicapOrder
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
