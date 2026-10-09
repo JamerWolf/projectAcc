@@ -1,6 +1,10 @@
 package com.example.projectacc.ui
 
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -50,6 +54,48 @@ fun SavedLocationsScreen(onBack: () -> Unit) {
     var showDialog by remember { mutableStateOf(false) }
     var editingLocation by remember { mutableStateOf<SavedLocation?>(null) }
 
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null) {
+            try {
+                val text = SavedLocationManager.exportJson(context)
+                val output = context.contentResolver.openOutputStream(uri)
+                if (output == null) {
+                    Toast.makeText(context, "No se pudo exportar", Toast.LENGTH_SHORT).show()
+                } else {
+                    output.use { it.write(text.toByteArray(Charsets.UTF_8)) }
+                }
+            } catch (e: Exception) {
+                Toast.makeText(context, "No se pudo exportar", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            try {
+                val input = context.contentResolver.openInputStream(uri)
+                val text = input?.use { it.readBytes().toString(Charsets.UTF_8) }
+                if (text.isNullOrEmpty()) {
+                    Toast.makeText(context, "No se pudo leer el archivo", Toast.LENGTH_SHORT).show()
+                } else {
+                    val n = SavedLocationManager.importJson(text, context)
+                    if (n < 0) {
+                        Toast.makeText(context, "Archivo no válido", Toast.LENGTH_SHORT).show()
+                    } else {
+                        locations = SavedLocationManager.loadLocations(context)
+                        Toast.makeText(context, "Se importaron $n ubicaciones", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (t: Throwable) {
+                Toast.makeText(context, "No se pudo leer el archivo", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -94,6 +140,30 @@ fun SavedLocationsScreen(onBack: () -> Unit) {
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(text = "+ Agregar ubicación")
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedButton(
+                onClick = { exportLauncher.launch("ubicaciones_acc.json") },
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(text = "Exportar")
+            }
+            OutlinedButton(
+                onClick = {
+                    importLauncher.launch(
+                        arrayOf("application/json", "application/octet-stream", "text/plain")
+                    )
+                },
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(text = "Importar")
+            }
         }
 
         Spacer(modifier = Modifier.height(12.dp))

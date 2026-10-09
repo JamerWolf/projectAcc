@@ -1,14 +1,17 @@
 package com.example.projectacc
 
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
 import android.provider.Settings
 import android.view.accessibility.AccessibilityManager
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -74,6 +77,7 @@ class MainActivity : ComponentActivity() {
     private var isServiceEnabled by mutableStateOf(false)
     private var isNotificationListenerEnabled by mutableStateOf(false)
     private var isOverlayEnabled by mutableStateOf(false)
+    private var isBatteryOptimizationExempt by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -145,7 +149,7 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                         ) { innerPadding ->
-                            val allPermissionsGranted = isServiceEnabled && isOverlayEnabled && isNotificationListenerEnabled
+                            val allPermissionsGranted = isServiceEnabled && isOverlayEnabled && isNotificationListenerEnabled && isBatteryOptimizationExempt
 
                             if (allPermissionsGranted) {
                                 MainScreen(
@@ -158,9 +162,11 @@ class MainActivity : ComponentActivity() {
                                     isAccessibilityEnabled = isServiceEnabled,
                                     isOverlayEnabled = isOverlayEnabled,
                                     isNotificationListenerEnabled = isNotificationListenerEnabled,
+                                    isBatteryOptimizationExempt = isBatteryOptimizationExempt,
                                     onOpenAccessibilitySettings = { openAccessibilitySettings() },
                                     onOpenOverlaySettings = { openOverlaySettings() },
                                     onOpenNotificationSettings = { openNotificationListenerSettings() },
+                                    onOpenBatteryOptimizationSettings = { openBatteryOptimizationSettings() },
                                     modifier = Modifier.padding(innerPadding)
                                 )
                             }
@@ -176,6 +182,7 @@ class MainActivity : ComponentActivity() {
         isServiceEnabled = checkAccessibilityServiceEnabled()
         isNotificationListenerEnabled = checkNotificationListenerEnabled()
         isOverlayEnabled = Settings.canDrawOverlays(this)
+        isBatteryOptimizationExempt = checkBatteryOptimizationExempt()
     }
 
     /**
@@ -233,6 +240,38 @@ class MainActivity : ComponentActivity() {
         )
         startActivity(intent)
     }
+
+    /**
+     * Verifica si esta aplicación está exenta de la optimización de batería del sistema.
+     *
+     * @return true si la app está exenta, false en caso contrario.
+     */
+    private fun checkBatteryOptimizationExempt(): Boolean {
+        val pm = getSystemService(POWER_SERVICE) as PowerManager
+        return pm.isIgnoringBatteryOptimizations(packageName)
+    }
+
+    /**
+     * Abre el diálogo de solicitud de exención de la optimización de batería
+     * para que el sistema no detenga la app en segundo plano.
+     */
+    private fun openBatteryOptimizationSettings() {
+        if (isBatteryOptimizationExempt) return
+        val intent = Intent(
+            Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+            Uri.parse("package:$packageName")
+        )
+        try {
+            startActivity(intent)
+        } catch (e: ActivityNotFoundException) {
+            // Fallback: some OEMs block the direct request dialog (plain action, no data URI)
+            try {
+                startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+            } catch (e2: ActivityNotFoundException) {
+                Toast.makeText(this, "No se pudo abrir la configuración de batería", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 }
 
 /**
@@ -244,9 +283,11 @@ fun ActivationScreen(
     isAccessibilityEnabled: Boolean,
     isOverlayEnabled: Boolean,
     isNotificationListenerEnabled: Boolean,
+    isBatteryOptimizationExempt: Boolean,
     onOpenAccessibilitySettings: () -> Unit,
     onOpenOverlaySettings: () -> Unit,
     onOpenNotificationSettings: () -> Unit,
+    onOpenBatteryOptimizationSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -300,9 +341,19 @@ fun ActivationScreen(
             onActivate = onOpenNotificationSettings
         )
 
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Battery optimization exemption
+        PermissionCard(
+            title = "4. No optimizar batería",
+            description = "Evita que el sistema detenga la app en segundo plano para seguir detectando servicios.",
+            isEnabled = isBatteryOptimizationExempt,
+            onActivate = onOpenBatteryOptimizationSettings
+        )
+
         Spacer(modifier = Modifier.height(32.dp))
 
-        if (isAccessibilityEnabled && isOverlayEnabled && isNotificationListenerEnabled) {
+        if (isAccessibilityEnabled && isOverlayEnabled && isNotificationListenerEnabled && isBatteryOptimizationExempt) {
             Text(
                 text = "Todos los permisos activados ✓",
                 style = MaterialTheme.typography.bodyLarge,
