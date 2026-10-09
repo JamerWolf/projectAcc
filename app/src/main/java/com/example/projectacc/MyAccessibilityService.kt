@@ -104,7 +104,7 @@ class MyAccessibilityService : AccessibilityService() {
 
     // Almacena la última orden detectada para evitar duplicados por ID
     private var lastOrder: PicapOrder? = null
-    // ID de la orden no-CV con cierre agendado (evita duplicar el timer de 500 ms).
+    // ID de la orden no-CV con cierre agendado (evita duplicar el timer de 200 ms).
     // Volatile: se escribe en el evento y se lee/libera desde la coroutine.
     @Volatile private var pendingCloseId: String = ""
 
@@ -116,7 +116,7 @@ class MyAccessibilityService : AccessibilityService() {
     private val CLICK_COOLDOWN_MS = 2000L
     // Espera antes de cerrar una oferta no-CV: da tiempo al popup de renderizar
     // el nodo de servicio "Cruz Verde ..." antes de decidir que no lo es.
-    private val NON_CV_CLOSE_DELAY_MS = 500L
+    private val NON_CV_CLOSE_DELAY_MS = 200L
 
     // --- Throttle adaptativo de eventos Picap (contra ráfagas) ---
     // Si en una ventana de 1 s llegan más de PICAP_FLOOD_HIGH eventos, se limita el
@@ -428,7 +428,7 @@ class MyAccessibilityService : AccessibilityService() {
         }
 
         // --- NO CRUZ VERDE: sin el nodo de servicio "Cruz Verde ..." (servicio vacío)
-        // y con estructura de popup de oferta → agendar el cierre en 500 ms (tiempo de
+        // y con estructura de popup de oferta → agendar el cierre en 200 ms (tiempo de
         // render) y NO registrar la orden en la tarjeta ni en el historial.
         // Regla de producto: si no es Cruz Verde SIEMPRE se cierra; no se memorizan
         // ids de servicios ya cerrados (una oferta que reaparezca se vuelve a cerrar).
