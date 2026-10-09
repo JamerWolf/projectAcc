@@ -1,6 +1,5 @@
 package com.example.projectacc.a11y
 
-import android.graphics.Rect
 import android.util.Log
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
@@ -71,25 +70,6 @@ object AccessibilityTree {
     }
 
     /**
-     * Busca recursivamente el valor numérico del porcentaje (ej: "99%") en el árbol.
-     */
-    fun findPercentage(node: AccessibilityNodeInfo?): Int? {
-        if (node == null) return null
-        val contentDesc = node.contentDescription?.toString() ?: ""
-        if (contentDesc.endsWith("%")) {
-            val numericValue = contentDesc.replace("%", "").trim().toIntOrNull()
-            if (numericValue != null) return numericValue
-        }
-        for (i in 0 until node.childCount) {
-            val child = node.getChild(i)
-            val found = findPercentage(child)
-            child?.recycle()
-            if (found != null) return found
-        }
-        return null
-    }
-
-    /**
      * Devuelve el primer nodo en profundidad cuyo contentDescription o text
      * satisface [pred]. El nodo devuelto es propiedad del caller; los
      * descendientes descartados se reciclan.
@@ -154,29 +134,6 @@ object AccessibilityTree {
         }
         if (!clicked) clicked = target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
         return clicked
-    }
-
-    /**
-     * Busca recursivamente el nodo cuyo contentDescription coincide exacto
-     * y retorna sus coordenadas en pantalla. Null si no existe.
-     */
-    fun findNodeBoundsByContentDescription(
-        node: AccessibilityNodeInfo?,
-        contentDescription: String
-    ): Rect? {
-        if (node == null) return null
-        if (node.contentDescription?.toString() == contentDescription) {
-            val rect = Rect()
-            node.getBoundsInScreen(rect)
-            if (!rect.isEmpty) return rect
-        }
-        for (i in 0 until node.childCount) {
-            val child = node.getChild(i)
-            val found = findNodeBoundsByContentDescription(child, contentDescription)
-            child?.recycle()
-            if (found != null) return found
-        }
-        return null
     }
 
     /**

@@ -60,6 +60,7 @@ class MyAccessibilityService : AccessibilityService() {
     private val listAutoclicker = PicapListAutoclicker()
     private val offerProcessor = PicapOfferProcessor(
         this,
+        serviceScope,
         picapWindowsProvider,
         kmOverlay,
         autoAcceptPolicy,

@@ -11,10 +11,8 @@ import android.util.Log
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
-import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.TextView
 import com.example.projectacc.SERVICE_TAG
-import com.example.projectacc.a11y.AccessibilityTree
 import com.example.projectacc.model.PicapOrder
 import kotlin.math.roundToInt
 
@@ -28,8 +26,9 @@ import kotlin.math.roundToInt
  *
  * THREADING CONTRACT: [showKmOverlay], [hideKmOverlay] and [updateKmOverlay]
  * use WindowManager and MUST always run on the main thread. Callers on
- * Dispatchers.Default must post the call to main (see
- * PicapOfferCloser.hideKmOverlayOnMain).
+ * Dispatchers.Default must post the call to main: PicapOfferProcessor wraps
+ * the call in withContext(Dispatchers.Main); PicapOfferCloser uses
+ * hideKmOverlayOnMain.
  *
  * @param context the owning [android.app.Service]; used for WindowManager,
  * resources and the overlay permission check.
@@ -43,16 +42,18 @@ class KmOverlay(private val context: Context) {
 
     /**
      * Muestra/actualiza u oculta el overlay de km totales según el estado
-     * de la orden actual y la posición del nodo del precio ("X.XXX COP").
+     * de la orden actual y el ancla ya resuelta en el escaneo único del árbol
+     * ([anchor] = bounds del nodo del precio "X.XXX COP"; null si no existe).
+     * El lookup NO recorre el árbol: los bounds vienen del DTO del scan.
+     * MAIN THREAD ONLY.
      */
-    fun updateKmOverlay(rootNode: AccessibilityNodeInfo, order: PicapOrder) {
+    fun updateKmOverlay(anchor: Rect?, order: PicapOrder) {
         val totalKm = order.kmRecogida + order.kmEntrega
         if (totalKm <= 0.0 || order.ganancia.isEmpty()) {
             hideKmOverlay()
             return
         }
         // El nodo del precio es el mismo del que se extrajo la ganancia
-        val anchor = AccessibilityTree.findNodeBoundsByContentDescription(rootNode, order.ganancia)
         if (anchor == null) {
             hideKmOverlay()
             return
