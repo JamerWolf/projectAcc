@@ -51,22 +51,24 @@ class LocationHelper(private val context: Context) {
     /**
      * Geocodes an address string to Location coordinates.
      */
-    fun geocodeAddress(address: String): Location? {
-        return try {
-            val results = geocoder.getFromLocationName(address, 1)
-            if (!results.isNullOrEmpty()) {
-                val result = results[0]
-                val location = Location("")
-                location.latitude = result.latitude
-                location.longitude = result.longitude
-                location
-            } else {
-                Log.w("LocationHelper", "No results for address: $address")
+    suspend fun geocodeAddress(address: String): Location? {
+        return withContext(Dispatchers.IO) {
+            try {
+                val results = geocoder.getFromLocationName(address, 1)
+                if (!results.isNullOrEmpty()) {
+                    val result = results[0]
+                    val location = Location("")
+                    location.latitude = result.latitude
+                    location.longitude = result.longitude
+                    location
+                } else {
+                    Log.w("LocationHelper", "No results for address: $address")
+                    null
+                }
+            } catch (e: Exception) {
+                Log.e("LocationHelper", "Geocoding error: ${e.message}")
                 null
             }
-        } catch (e: Exception) {
-            Log.e("LocationHelper", "Geocoding error: ${e.message}")
-            null
         }
     }
 

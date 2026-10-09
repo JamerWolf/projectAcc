@@ -13,6 +13,9 @@ object SavedLocationManager {
     private const val PREFS_NAME = "saved_locations"
     private const val KEY_LOCATIONS = "locations"
 
+    @Volatile
+    private var cachedLocations: List<SavedLocation>? = null
+
     /**
      * Finds the best matching location for the given origin address.
      * Scoring: +2 if keyword is at the start, +1 if contained anywhere.
@@ -107,6 +110,7 @@ object SavedLocationManager {
         val jsonArray = toJsonArray(locations)
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit().putString(KEY_LOCATIONS, jsonArray.toString()).apply()
+        cachedLocations = null
         Log.d("SavedLocationManager", "Saved ${locations.size} locations")
     }
 
@@ -114,10 +118,11 @@ object SavedLocationManager {
      * Loads all saved locations from SharedPreferences.
      */
     fun loadLocations(context: Context): List<SavedLocation> {
+        cachedLocations?.let { return it }
         val json = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .getString(KEY_LOCATIONS, "[]") ?: "[]"
         return try {
-            parseArray(JSONArray(json))
+            parseArray(JSONArray(json)).also { cachedLocations = it }
         } catch (e: Exception) {
             Log.e("SavedLocationManager", "Error loading: ${e.message}")
             emptyList()

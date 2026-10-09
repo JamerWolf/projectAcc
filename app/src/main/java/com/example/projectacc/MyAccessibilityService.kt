@@ -24,6 +24,8 @@ import kotlinx.coroutines.cancel
  */
 const val SERVICE_TAG = "MyAccessibilityService"
 
+private const val EVENT_DEBUG = false
+
 /**
  * Thin AccessibilityService shell: lifecycle, per-package event routing and
  * the public facade. Behavior lives in the collaborators: [PicapEventThrottle],
@@ -134,40 +136,40 @@ class MyAccessibilityService : AccessibilityService() {
             return
         }
 
-        val type = when (event?.eventType) {
-            1 -> "VIEW_CLICKED"
-            2 -> "VIEW_LONG_CLICKED"
-            4 -> "VIEW_SELECTED"
-            8 -> "VIEW_FOCUSED"
-            16 -> "VIEW_TEXT_CHANGED"
-            32 -> "WINDOW_STATE_CHANGED"
-            64 -> "NOTIFICATION_STATE_CHANGED"
-            128 -> "VIEW_HOVER_ENTER"
-            256 -> "VIEW_HOVER_EXIT"
-            512 -> "TOUCH_EXPLORATION_GESTURE_START"
-            1024 -> "TOUCH_EXPLORATION_GESTURE_END"
-            2048 -> "WINDOW_CONTENT_CHANGED"
-            4096 -> "VIEW_TEXT_SELECTION_CHANGED"
-            8192 -> "VIEW_SCROLLED"
-            16384 -> "VIEW_TEXT_TRAVERSED_AT_MOVEMENT_GRANULARITY"
-            32768 -> "GESTURE_DETECTION_START"
-            65536 -> "GESTURE_DETECTION_END"
-            131072 -> "TOUCH_INTERACTION_START"
-            262144 -> "TOUCH_INTERACTION_END"
-            524288 -> "WINDOWS_CHANGED"
-            1048576 -> "VIEW_CONTEXT_CLICKED"
-            2097152 -> "ASSIST_READING_CONTEXT"
-            else -> "TYPE_${event?.eventType}"
+        if (EVENT_DEBUG) {
+            val type = when (event?.eventType) {
+                1 -> "VIEW_CLICKED"
+                2 -> "VIEW_LONG_CLICKED"
+                4 -> "VIEW_SELECTED"
+                8 -> "VIEW_FOCUSED"
+                16 -> "VIEW_TEXT_CHANGED"
+                32 -> "WINDOW_STATE_CHANGED"
+                64 -> "NOTIFICATION_STATE_CHANGED"
+                128 -> "VIEW_HOVER_ENTER"
+                256 -> "VIEW_HOVER_EXIT"
+                512 -> "TOUCH_EXPLORATION_GESTURE_START"
+                1024 -> "TOUCH_EXPLORATION_GESTURE_END"
+                2048 -> "WINDOW_CONTENT_CHANGED"
+                4096 -> "VIEW_TEXT_SELECTION_CHANGED"
+                8192 -> "VIEW_SCROLLED"
+                16384 -> "VIEW_TEXT_TRAVERSED_AT_MOVEMENT_GRANULARITY"
+                32768 -> "GESTURE_DETECTION_START"
+                65536 -> "GESTURE_DETECTION_END"
+                131072 -> "TOUCH_INTERACTION_START"
+                262144 -> "TOUCH_INTERACTION_END"
+                524288 -> "WINDOWS_CHANGED"
+                1048576 -> "VIEW_CONTEXT_CLICKED"
+                2097152 -> "ASSIST_READING_CONTEXT"
+                else -> "TYPE_${event?.eventType}"
+            }
+            Log.d(
+                "EVENT_DEBUG",
+                "TYPE=${type} " +
+                        "PACKAGE=${event?.packageName} " +
+                        "CLASS=${event?.className} " +
+                        "TEXT=${event?.text}"
+            )
         }
-        Log.d(
-            "EVENT_DEBUG",
-            "TYPE=${type} " +
-                    "PACKAGE=${event?.packageName} " +
-                    "CLASS=${event?.className} " +
-                    "TEXT=${event?.text}"
-        )
-
-        AccessibilityTree.logWindows(windows)
 
         if (event == null) return
         val packageName = event.packageName?.toString() ?: return

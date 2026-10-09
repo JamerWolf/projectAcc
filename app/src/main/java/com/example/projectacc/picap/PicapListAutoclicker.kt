@@ -16,6 +16,8 @@ class PicapListAutoclicker {
     // Controla si ya se escaneó la lista al iniciar el auto-clic
     internal var hasScannedInitially = false
 
+    private val serviceIdRegex = Regex("ID: ([a-f0-9]+)", RegexOption.IGNORE_CASE)
+
     /**
      * Busca recursivamente en el árbol de nodos un elemento cuyo contentDescription
      * contenga "Precio estimado" (orden en lista de Picap) y hace clic en él.
@@ -41,7 +43,7 @@ class PicapListAutoclicker {
         val cd = node.contentDescription?.toString() ?: ""
         if (cd.contains("Precio estimado")) {
             // Extraer el ID de este servicio
-            val idMatch = Regex("ID: ([a-f0-9]+)", RegexOption.IGNORE_CASE).find(cd)
+            val idMatch = serviceIdRegex.find(cd)
             val serviceId = idMatch?.groupValues?.get(1) ?: ""
 
             // --- VERIFICAR MEMORIA ANTES DE HACER CLIC ---
@@ -106,7 +108,7 @@ class PicapListAutoclicker {
         val cd = node.contentDescription?.toString() ?: ""
         if (cd.contains("Precio estimado")) {
             // Buscar el patrón "ID: XXXXX" en el contentDescription
-            val idMatch = Regex("ID: ([a-f0-9]+)", RegexOption.IGNORE_CASE).find(cd)
+            val idMatch = serviceIdRegex.find(cd)
             if (idMatch != null) {
                 val id = idMatch.groupValues[1]
                 ids.add(id)

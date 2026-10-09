@@ -4,6 +4,8 @@ import com.example.projectacc.model.PicapOrder
 
 object PicapParser {
 
+    private val kmParensRegex = Regex("\\(([\\d,\\.]+)\\s*(km|m)\\)")
+
     /**
      * Analiza la lista de textos para extraer los campos del modelo PicapOrder.
      */
@@ -67,7 +69,7 @@ object PicapParser {
      * Extrae los kilómetros de recogida de un string como "A 9 mins (4.31 km)"
      */
     fun extractKmFromPickup(pickupText: String): Double {
-        val match = Regex("\\(([\\d,\\.]+)\\s*(km|m)\\)").find(pickupText)
+        val match = kmParensRegex.find(pickupText)
         if (match != null) {
             val value = match.groupValues[1].replace(",", ".").toDoubleOrNull() ?: return 999.0
             val unit = match.groupValues[2]

@@ -38,6 +38,8 @@ class KmOverlay(private val context: Context) {
 
     private var kmOverlayTextView: TextView? = null
     private var kmOverlayAttached = false
+    private var lastAnchor: Rect? = null
+    private var lastText: String? = null
 
     /**
      * Muestra/actualiza u oculta el overlay de km totales según el estado
@@ -64,6 +66,10 @@ class KmOverlay(private val context: Context) {
                 Log.w(SERVICE_TAG, "KM_OVERLAY: permiso de overlay no concedido; no se muestra")
                 return
             }
+            val text = "📏 ${String.format("%.1f", totalKm)} km"
+            if (kmOverlayAttached && text == lastText && anchor == lastAnchor) {
+                return
+            }
             val wm = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
             val density = context.resources.displayMetrics.density
             val marginPx = (8 * density).roundToInt()
@@ -86,7 +92,7 @@ class KmOverlay(private val context: Context) {
                 elevation = 6f * density
                 kmOverlayTextView = this
             }
-            tv.text = "📏 ${String.format("%.1f", totalKm)} km"
+            tv.text = text
 
             val params = WindowManager.LayoutParams(
                 WindowManager.LayoutParams.WRAP_CONTENT,
@@ -117,6 +123,8 @@ class KmOverlay(private val context: Context) {
                     "KM_OVERLAY: visible total=${String.format("%.1f", totalKm)} km y=${params.y} h=${tv.measuredHeight} sb=$sbH rect=${anchor.toShortString()}"
                 )
             }
+            lastAnchor = Rect(anchor)
+            lastText = text
         } catch (e: Exception) {
             Log.e(SERVICE_TAG, "KM_OVERLAY: error mostrando overlay: ${e.message}")
         }

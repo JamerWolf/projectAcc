@@ -16,6 +16,8 @@ import com.example.projectacc.parser.WhatsAppParser
 class NotificationInterceptorService : NotificationListenerService() {
     private val TAG = "NotificationInterceptor"
 
+    private val kmOrigenRegex = Regex("([\\d.,]+)\\s*km", RegexOption.IGNORE_CASE)
+
     private var floatingPopup: FloatingPopupManager? = null
 
     override fun onCreate() {
@@ -156,7 +158,7 @@ class NotificationInterceptorService : NotificationListenerService() {
             )
 
             // Extract km from origen
-            val match = Regex("([\\d.,]+)\\s*km", RegexOption.IGNORE_CASE).find(service.origen)
+            val match = kmOrigenRegex.find(service.origen)
             val kmRecogida = match?.groupValues?.get(1)?.replace(",", ".")?.toDoubleOrNull()
 
             val meetsConditions = evaluateAutoAccept(valor, kmRecogida ?: 999.0, config).accepted

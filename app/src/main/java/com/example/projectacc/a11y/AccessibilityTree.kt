@@ -207,46 +207,6 @@ object AccessibilityTree {
         Log.d(SERVICE_TAG, treeBuilder.toString())
     }
 
-    fun logWindows(windows: List<AccessibilityWindowInfo>) {
-        Log.d("DEBUG_WINDOWS", "==========WINDOWS (${windows.size})=============")
-        windows.forEach { window ->
-            try {
-                val type = when (window.type) {
-                    1 -> "APPLICATION"
-                    2 -> "INPUT_METHOD"
-                    3 -> "SYSTEM"
-                    4 -> "ACCESSIBILITY_OVERLAY"
-                    5 -> "SPLIT_SCREEN_DIVIDER"
-                    6 -> "MAGNIFICATION_OVERLAY"
-                    else -> "TYPE_${window.type}"
-                }
-
-                val root = window.root
-
-                val pkg = root?.packageName?.toString() ?: "ROOT_NULL"
-
-                Log.d(
-                    "DEBUG_WINDOWS",
-                    "Window: " +
-                            "id=${window.id} " +
-                            "type=$type(${window.type}) " +
-                            "pkg=$pkg " +
-                            "root=${root != null} " +
-                            "active=${window.isActive} " +
-                            "focused=${window.isFocused} " +
-                            "layer=${window.layer}"
-                )
-
-            } catch (e: Exception) {
-                Log.w(
-                    "DEBUG_WINDOWS",
-                    "Error procesando window: ${e.message}"
-                )
-            }
-        }
-        Log.d("DEBUG_WINDOWS", "===========================================")
-    }
-
     /**
      * Retorna todas las ventanas que coincidan con el packageName dado.
      */

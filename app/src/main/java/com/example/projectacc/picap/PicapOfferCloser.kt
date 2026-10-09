@@ -78,9 +78,9 @@ class PicapOfferCloser(
      * puede reordenarse entre la detección y el relectura). Se ejecuta en
      * Dispatchers.Default; hideKmOverlay se postea al main porque usa WindowManager.
      * performAction=true NO garantiza que se clickeó la X correcta: tras el clic
-     * se espera 300 ms y se verifica que el popup haya desaparecido antes de dar
-     * la orden por cerrada (no se memorizan ids: si la misma oferta reaparece,
-     * la rama NO-CV la vuelve a agendar y a cerrar).
+     * se verifica en polling (cada 100 ms, tope 300 ms) que el popup haya
+     * desaparecido antes de dar la orden por cerrada (no se memorizan ids: si la
+     * misma oferta reaparece, la rama NO-CV la vuelve a agendar y a cerrar).
      */
     private suspend fun attemptNonCvClose(orderId: String, attempt: Int, maxAttempts: Int): NonCvCloseOutcome {
         val picapWindows = try {
@@ -115,8 +115,15 @@ class PicapOfferCloser(
             picapWindows.forEach { it.recycle() }
             hideKmOverlayOnMain()
             if (!clicked) return NonCvCloseOutcome.CLICK_FAILED
-            delay(300)
-            if (picapOfferStillVisible()) {
+            var stillVisible = true
+            for (poll in 1..3) {
+                delay(100)
+                if (!picapOfferStillVisible()) {
+                    stillVisible = false
+                    break
+                }
+            }
+            if (stillVisible) {
                 Log.i(SERVICE_TAG, "NO-CV: click=true pero el popup de #$orderId sigue visible tras 300 ms; se reintenta.")
                 return NonCvCloseOutcome.CLICK_FAILED
             }
@@ -196,7 +203,8 @@ class PicapOfferCloser(
      * ImageView sin CD ni texto y se prioriza (1) más clickeable, (2) el más a
      * la derecha (la X vive en la esquina superior derecha; el chevron va al
      * centro), (3) empate → más arriba. Retorna true si performAction devolvió
-     * true; el caller verifica si el popup realmente desapareció.
+     * true; el caller verifica si el popup realmente desapareció (polling cada
+     * 100 ms, tope 300 ms).
      */
     private fun findAndClickCloseButton(rootNode: AccessibilityNodeInfo?): Boolean {
         if (rootNode == null) return false

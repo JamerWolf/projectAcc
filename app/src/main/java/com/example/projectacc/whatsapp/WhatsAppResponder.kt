@@ -52,6 +52,8 @@ class WhatsAppResponder(
     private val responsePatterns =
         listOf("genial", "asignarte", "envíame la placa", "enviame la placa")
 
+    private val kmOrigenRegex = Regex("([\\d.,]+)\\s*km", RegexOption.IGNORE_CASE)
+
     /**
      * Extracts the last message block from the full text.
      * Finds the last ⚡ or "Nuevo servicio" and returns text from there.
@@ -173,7 +175,7 @@ class WhatsAppResponder(
      * Returns km value or null if not found.
      */
     private fun extractKmFromWhatsApp(origen: String): Double? {
-        val match = Regex("([\\d.,]+)\\s*km", RegexOption.IGNORE_CASE).find(origen)
+        val match = kmOrigenRegex.find(origen)
         return match?.groupValues?.get(1)?.replace(",", ".")?.toDoubleOrNull()
     }
 
@@ -234,14 +236,16 @@ class WhatsAppResponder(
                 inputNode.performAction(AccessibilityNodeInfo.ACTION_PASTE, pasteBundle)
                 Log.d(SERVICE_TAG, "WHATSAPP: Texto pegado: $text")
 
-                // Increased delay and added retry for send button
                 val handler = android.os.Handler(android.os.Looper.getMainLooper())
-                var attempts = 0
+                var attempts = 1
                 val maxAttempts = 3
+                val pollIntervalMs = 50L
+                val phaseBudgetMs = longArrayOf(400L, 200L, 200L)
 
                 val retryRunnable = object : Runnable {
+                    var phaseStart = android.os.SystemClock.uptimeMillis()
+
                     override fun run() {
-                        attempts++
                         val root = rootProvider() ?: return
                         val sendBtn = findSendButton(root)
                         if (sendBtn != null) {
@@ -254,25 +258,31 @@ class WhatsAppResponder(
                             }
                             sendBtn.recycle()
                             root.recycle()
+                            return
+                        }
+                        root.recycle()
+                        val budget = phaseBudgetMs[attempts - 1]
+                        val elapsedInPhase = android.os.SystemClock.uptimeMillis() - phaseStart
+                        if (elapsedInPhase + pollIntervalMs <= budget) {
+                            handler.postDelayed(this, pollIntervalMs)
+                        } else if (attempts < maxAttempts) {
+                            Log.d(
+                                SERVICE_TAG,
+                                "WHATSAPP: Boton de envio no encontrado, reintento #$attempts"
+                            )
+                            attempts++
+                            phaseStart = android.os.SystemClock.uptimeMillis()
+                            handler.postDelayed(this, pollIntervalMs)
                         } else {
-                            root.recycle()
-                            if (attempts < maxAttempts) {
-                                Log.d(
-                                    SERVICE_TAG,
-                                    "WHATSAPP: Boton de envio no encontrado, reintento #$attempts"
-                                )
-                                handler.postDelayed(this, 300)
-                            } else {
-                                Log.w(
-                                    SERVICE_TAG,
-                                    "WHATSAPP: Boton de envio no encontrado despues de $maxAttempts intentos"
-                                )
-                            }
+                            Log.w(
+                                SERVICE_TAG,
+                                "WHATSAPP: Boton de envio no encontrado despues de $maxAttempts intentos"
+                            )
                         }
                     }
                 }
 
-                handler.postDelayed(retryRunnable, 200)
+                handler.postDelayed(retryRunnable, pollIntervalMs)
             } else {
                 Log.w(SERVICE_TAG, "WHATSAPP: Campo de texto no encontrado")
             }
@@ -317,12 +327,10 @@ class WhatsAppResponder(
                 id.contains("com.whatsapp:id/send", ignoreCase = true)
             ) {
                 if (node.isClickable) return node
-                // Try parent
                 val parent = node.parent
-                if (parent != null && parent.isClickable) {
-                    val result = parent
+                if (parent != null) {
+                    if (parent.isClickable) return parent
                     parent.recycle()
-                    return result
                 }
             }
         }

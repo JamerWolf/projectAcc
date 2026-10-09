@@ -11,6 +11,8 @@ import com.example.projectacc.a11y.AccessibilityTree
 import com.example.projectacc.model.PicapOrder
 import com.example.projectacc.parser.PicapParser
 
+private const val TREE_DEBUG = false
+
 /**
  * Picap pipeline orchestration: walks the windows, filters by percentage,
  * delegates parse/policy/autoclick/close/overlay and records the order in the
@@ -105,7 +107,9 @@ class PicapOfferProcessor(
      */
     private fun processPicapWindow(rootNode: AccessibilityNodeInfo): Boolean {
         // 1. GENERAR EL LOG VISUAL DEL ÁRBOL
-        AccessibilityTree.logginTree(rootNode)
+        if (TREE_DEBUG) {
+            AccessibilityTree.logginTree(rootNode)
+        }
 
         // 2. EXTRAER DATOS PARA EL MODELO ORDER
         val nodesContent = mutableListOf<String>()
