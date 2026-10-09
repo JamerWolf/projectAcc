@@ -4,6 +4,8 @@ import android.content.Context
 import android.util.Log
 import com.example.projectacc.OrderStateManager
 import com.example.projectacc.SERVICE_TAG
+import com.example.projectacc.eval.AutoAcceptConfig
+import com.example.projectacc.eval.evaluateAutoAccept
 import com.example.projectacc.location.SavedLocationManager
 import com.example.projectacc.model.PicapOrder
 import com.example.projectacc.parser.PicapParser
@@ -62,57 +64,48 @@ class PicapAutoAcceptPolicy(private val context: Context) {
         val minGanancia2 = OrderStateManager.autoAcceptMinGanancia2.value.toInt()
         val maxKmCond2 = OrderStateManager.autoAcceptMaxKmCond2.value
 
-        val cond1Type = OrderStateManager.picapAutoAcceptTypeCond1.value
-        val cond1TypeOk = matchesOrderType(order, cond1Type, trasladoOk)
-        if (cond1Type != "TODOS" && !cond1TypeOk) {
-            logOrderTypeSkip(1, cond1Type, order)
+        val config = AutoAcceptConfig(
+            minGanancia1,
+            minGanancia2,
+            maxKmCond2,
+            OrderStateManager.isAutoAcceptByKmEnabled.value,
+            autoAcceptKm
+        )
+        // Gates por tipo de pedido evaluados DENTRO del lambda: el evaluator los consulta
+        // en el mismo orden secuencial que el código original (cond N solo se evalúa si
+        // la N-1 no aceptó), por lo que logOrderTypeSkip conserva su posición exacta.
+        val result = evaluateAutoAccept(gananciaNum, kmRecogida, config) { n ->
+            val type = when (n) {
+                1 -> OrderStateManager.picapAutoAcceptTypeCond1.value
+                2 -> OrderStateManager.picapAutoAcceptTypeCond2.value
+                else -> OrderStateManager.picapAutoAcceptTypeCond3.value
+            }
+            val ok = matchesOrderType(order, type, trasladoOk)
+            if (type != "TODOS" && !ok) {
+                logOrderTypeSkip(n, type, order)
+            }
+            ok
         }
 
-        // CONDICIÓN 1: Tipo de pedido coincide Y Ganancia >= umbral 1 → ACEPTAR SIEMPRE
-        if (cond1TypeOk && gananciaNum >= minGanancia1) {
-            Log.d(
+        when (result.condition) {
+            1 -> Log.d(
                 SERVICE_TAG,
                 "AUTO-ACCEPT: Condición 1 - Ganancia $gananciaNum >= $minGanancia1. Aceptando."
             )
-            return true
-        }
-
-        val cond2Type = OrderStateManager.picapAutoAcceptTypeCond2.value
-        val cond2TypeOk = matchesOrderType(order, cond2Type, trasladoOk)
-        if (cond2Type != "TODOS" && !cond2TypeOk) {
-            logOrderTypeSkip(2, cond2Type, order)
-        }
-
-        // CONDICIÓN 2: Tipo de pedido coincide Y Ganancia >= umbral 2 Y km <= km máximo condición 2 → ACEPTAR
-        if (cond2TypeOk && gananciaNum >= minGanancia2 && kmRecogida <= maxKmCond2) {
-            Log.d(
+            2 -> Log.d(
                 SERVICE_TAG,
                 "AUTO-ACCEPT: Condición 2 - Ganancia $gananciaNum >= $minGanancia2 Y km $kmRecogida <= $maxKmCond2. Aceptando."
             )
-            return true
+            3 -> Log.d(
+                SERVICE_TAG,
+                "AUTO-ACCEPT: Condición 3 - umbral al máximo o km $kmRecogida <= umbral $autoAcceptKm. Aceptando."
+            )
+            else -> Log.d(
+                SERVICE_TAG,
+                "AUTO-ACCEPT: No cumple ninguna condición (Ganancia: $gananciaNum, Km: $kmRecogida, Umbral: $autoAcceptKm)"
+            )
         }
-
-        // CONDICIÓN 3: km <= umbral seleccionado → ACEPTAR (solo si el switch está activo)
-        if (OrderStateManager.isAutoAcceptByKmEnabled.value) {
-            val cond3Type = OrderStateManager.picapAutoAcceptTypeCond3.value
-            val cond3TypeOk = matchesOrderType(order, cond3Type, trasladoOk)
-            if (cond3Type != "TODOS" && !cond3TypeOk) {
-                logOrderTypeSkip(3, cond3Type, order)
-            }
-            if (cond3TypeOk && (autoAcceptKm >= 5.0 || kmRecogida <= autoAcceptKm)) {
-                Log.d(
-                    SERVICE_TAG,
-                    "AUTO-ACCEPT: Condición 3 - umbral al máximo o km $kmRecogida <= umbral $autoAcceptKm. Aceptando."
-                )
-                return true
-            }
-        }
-
-        Log.d(
-            SERVICE_TAG,
-            "AUTO-ACCEPT: No cumple ninguna condición (Ganancia: $gananciaNum, Km: $kmRecogida, Umbral: $autoAcceptKm)"
-        )
-        return false
+        return result.accepted
     }
 
     /**

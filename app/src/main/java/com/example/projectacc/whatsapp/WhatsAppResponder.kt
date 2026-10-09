@@ -10,6 +10,8 @@ import android.view.accessibility.AccessibilityNodeInfo
 import com.example.projectacc.OrderStateManager
 import com.example.projectacc.SERVICE_TAG
 import com.example.projectacc.a11y.AccessibilityTree
+import com.example.projectacc.eval.AutoAcceptConfig
+import com.example.projectacc.eval.evaluateAutoAccept
 import com.example.projectacc.floating.FloatingPopupManager
 import com.example.projectacc.parser.WhatsAppParser
 import kotlinx.coroutines.CoroutineScope
@@ -115,21 +117,23 @@ class WhatsAppResponder(
         OrderStateManager.setWhatsAppOrder(service)
         OrderStateManager.addScannedWhatsAppServiceId(service.id)
 
-        // Check auto-accept conditions (same as Picap)
+        // Check auto-accept conditions (same evaluator as Picap)
         val valor = service.extractValor() ?: 0
-        val minGanancia1 = OrderStateManager.whatsappAutoAcceptMinGanancia1.value
-        val minGanancia2 = OrderStateManager.whatsappAutoAcceptMinGanancia2.value
-        val maxKmCond2 = OrderStateManager.whatsappAutoAcceptMaxKmCond2.value
-        val isKmEnabled = OrderStateManager.isWhatsappAutoAcceptByKmEnabled.value
-        val maxKm = OrderStateManager.whatsappAutoAcceptMaxKm.value
+        val config = AutoAcceptConfig(
+            OrderStateManager.whatsappAutoAcceptMinGanancia1.value.toInt(),
+            OrderStateManager.whatsappAutoAcceptMinGanancia2.value.toInt(),
+            OrderStateManager.whatsappAutoAcceptMaxKmCond2.value,
+            OrderStateManager.isWhatsappAutoAcceptByKmEnabled.value,
+            OrderStateManager.whatsappAutoAcceptMaxKm.value
+        )
 
         // Extract km from service (WhatsApp services may have km in origen field)
         val kmRecogida = extractKmFromWhatsApp(service.origen)
 
         // Check if service meets auto-accept conditions
-        val meetsConditions = valor >= minGanancia1 ||
-                (kmRecogida != null && kmRecogida <= maxKmCond2 && valor >= minGanancia2) ||
-                (isKmEnabled && kmRecogida != null && (maxKm >= 5.0 || kmRecogida <= maxKm))
+        // km desconocido adopta el centinela de Picap (999.0): con umbral al
+        // máximo (>= 5.0) la condición 3 acepta aunque no se conozcan los km.
+        val meetsConditions = evaluateAutoAccept(valor, kmRecogida ?: 999.0, config).accepted
 
         // Auto-respond if enabled AND conditions are met
         if (autoRespondEnabled && meetsConditions) {
