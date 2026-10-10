@@ -111,13 +111,14 @@ class PicapAutoAcceptPolicy(private val context: Context) {
     /**
      * Decide si una orden coincide con un tipo de pedido ("OMS" | "MOSTRADOR" | "TRASLADO" | "TODOS").
      * Lógica compartida por el filtro global y los selectores de tipo por condición.
-     * "OMS" solo si el servicio dice "Cruz Verde Integración" (con o sin acento).
+     * Sistema binario: "OMS" solo si el servicio dice "Cruz Verde Integración" (con o sin
+     * acento); "MOSTRADOR" es todo lo que no sea OMS. Exclusivos entre sí.
      * "TRASLADO" delega en [isTrasladoDeliveryOk] (evaluación diferida vía [trasladoOk]).
      */
     private fun matchesOrderType(order: PicapOrder, type: String, trasladoOk: Lazy<Boolean>): Boolean =
         when (type) {
             "OMS" -> PicapParser.isOmsService(order.servicio)
-            "MOSTRADOR" -> order.servicio.contains("Mostrador", ignoreCase = true)
+            "MOSTRADOR" -> !PicapParser.isOmsService(order.servicio)
             "TRASLADO" -> trasladoOk.value
             // "TODOS" u otro valor: coincide con todo sin filtrar direccion
             else -> true
