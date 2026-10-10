@@ -136,6 +136,22 @@ private fun PicapOrderCard(order: PicapOrder, onDismiss: () -> Unit) {
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                // Precio por km: ganancia / km totales (misma limpieza que PicapAutoAcceptPolicy)
+                val gananciaNum = order.ganancia
+                    .replace("COP", "")
+                    .replace("$", "")
+                    .replace(" ", "")
+                    .replace(".", "")
+                    .replace(",", "")
+                    .toIntOrNull() ?: 0
+                if (gananciaNum > 0) {
+                    val pricePerKm = gananciaNum / totalKm
+                    Text(
+                        text = "\uD83D\uDCB0 ${String.format(Locale.US, "%,d", pricePerKm.toInt()).replace(',', '.')} ${'$'}/km",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(12.dp))

@@ -32,14 +32,22 @@ object PicapParser {
                 ganancia = texts[i + 1]
             }
 
-            // Recogida: Detecta "A X mins..."
-            if (current.startsWith("A ") && current.contains("min") && i + 1 < texts.size) {
+            // Recogida: Detecta "A X mins...". Solo si aún no se capturó una recogida:
+            // la SEGUNDA línea con forma "A ..." es la entrega corta
+            // ("A menos de un minuto (890m)"), que antes pisaba la recogida y
+            // dejaba dirEnt sin parsear.
+            val isALine = current.startsWith("A ") && current.contains("min")
+            // Entrega clásica: "X min(s) (X km)" que NO empieza por "A ".
+            val isDeliveryClassic =
+                (current.contains("min (") || current.contains("mins (")) && !current.startsWith("A ")
+            // Entrega corta: forma "A ..." ya consumida por la recogida y con km entre paréntesis
+            // (el paréntesis la distingue de una dirección que empiece por "A ").
+            val isDeliveryShort = isALine && tiempoRec.isNotEmpty() && kmParensRegex.containsMatchIn(current)
+
+            if (isALine && tiempoRec.isEmpty() && i + 1 < texts.size) {
                 tiempoRec = current
                 dirRec = texts[i + 1]
-            }
-
-            // Entrega: Detecta "X min(s) (X km)" que NO empieza por "A "
-            if ((current.contains("min (") || current.contains("mins (")) && !current.startsWith("A ")) {
+            } else if (isDeliveryClassic || isDeliveryShort) {
                 tiempoEnt = current
                 // La dirección puede estar en i+1 o en i+2 (si el ID se interpone)
                 if (i + 1 < texts.size) {
