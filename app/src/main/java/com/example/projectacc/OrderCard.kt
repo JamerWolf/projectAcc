@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.projectacc.model.PicapOrder
 import com.example.projectacc.model.WhatsAppService
+import com.example.projectacc.parser.PicapParser
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -99,7 +100,12 @@ private fun PicapOrderCard(order: PicapOrder, onDismiss: () -> Unit) {
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             // Source indicator + Title + hora de captura
-            val shortTitle = if (order.servicio.contains("Mostrador", ignoreCase = true)) "Mostrador" else "OMS"
+            val shortTitle = when {
+                order.servicio.contains("Mostrador", ignoreCase = true) -> "Mostrador"
+                PicapParser.isOmsService(order.servicio) -> "OMS"
+                order.servicio.isNotBlank() -> order.servicio
+                else -> "Pedido"
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically

@@ -66,6 +66,15 @@ object PicapParser {
     }
 
     /**
+     * Identifica pedidos OMS: el servicio debe decir "Cruz Verde Integración"
+     * (con o sin acento). Cualquier otro servicio no es OMS.
+     */
+    fun isOmsService(servicio: String): Boolean =
+        servicio.contains("cruz verde", ignoreCase = true) &&
+            (servicio.contains("integracion", ignoreCase = true) ||
+                servicio.contains("integración", ignoreCase = true))
+
+    /**
      * Extrae los kilómetros de recogida de un string como "A 9 mins (4.31 km)"
      */
     fun extractKmFromPickup(pickupText: String): Double {
