@@ -6,7 +6,6 @@ import com.example.projectacc.OrderStateManager
 import com.example.projectacc.SERVICE_TAG
 import com.example.projectacc.eval.AutoAcceptConfig
 import com.example.projectacc.eval.evaluateAutoAccept
-import com.example.projectacc.location.SavedLocationManager
 import com.example.projectacc.model.PicapOrder
 import com.example.projectacc.parser.PicapParser
 
@@ -137,21 +136,15 @@ class PicapAutoAcceptPolicy(private val context: Context) {
     }
 
     /**
-     * Condición de dirección para el filtro Traslado: la dirección de ENTREGA debe
-     * contener "cruz verde" o coincidir con una dirección guardada (SavedLocationManager).
-     * La recogida NO se verifica (siempre es Cruz Verde en Traslado).
+     * Condición de dirección para el filtro Traslado: delega en la regla única
+     * [PicapParser.isTrasladoDelivery] (entrega con "cruz verde" o dirección guardada).
      * Las condiciones de ganancia/km se evalúan después, aparte.
      */
     private fun isTrasladoDeliveryOk(order: PicapOrder): Boolean {
-        if (order.direccionEntrega.contains("cruz verde", ignoreCase = true)) {
-            Log.d(SERVICE_TAG, "AUTO-ACCEPT: Traslado - entrega contiene 'cruz verde'. Direccion OK.")
-            return true
+        val ok = PicapParser.isTrasladoDelivery(order.direccionEntrega, context)
+        if (ok) {
+            Log.d(SERVICE_TAG, "AUTO-ACCEPT: Traslado - entrega '${order.direccionEntrega}' valida (cruz verde o direccion guardada).")
         }
-        val match = SavedLocationManager.findMatch(order.direccionEntrega, context)
-        if (match != null) {
-            Log.d(SERVICE_TAG, "AUTO-ACCEPT: Traslado - entrega coincide con direccion guardada '${match.name}'.")
-            return true
-        }
-        return false
+        return ok
     }
 }

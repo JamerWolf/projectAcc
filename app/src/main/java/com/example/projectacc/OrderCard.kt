@@ -100,8 +100,12 @@ private fun PicapOrderCard(order: PicapOrder, onDismiss: () -> Unit) {
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             // Source indicator + Title + hora de captura
-            // Binario: OMS solo si es Cruz Verde Integración; todo lo demás es Mostrador.
-            val shortTitle = if (PicapParser.isOmsService(order.servicio)) "OMS" else "Mostrador"
+            // Prioridad: Traslado (regla de entrega) > OMS > Mostrador.
+            val shortTitle = when {
+                PicapParser.isTrasladoDelivery(order.direccionEntrega, context) -> "Traslado"
+                PicapParser.isOmsService(order.servicio) -> "OMS"
+                else -> "Mostrador"
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically

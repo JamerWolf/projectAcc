@@ -1,5 +1,7 @@
 package com.example.projectacc.parser
 
+import android.content.Context
+import com.example.projectacc.location.SavedLocationManager
 import com.example.projectacc.model.PicapOrder
 
 object PicapParser {
@@ -64,6 +66,16 @@ object PicapParser {
         val kmEnt = extractKmFromPickup(tiempoEnt).takeIf { it < 999.0 } ?: 0.0
         return PicapOrder(id, ganancia, tiempoRec, dirRec, tiempoEnt, dirEnt, servicio, kmRec, kmEnt, System.currentTimeMillis())
     }
+
+    /**
+     * Regla de Traslado: la dirección de ENTREGA contiene "cruz verde" o coincide
+     * con una dirección guardada (SavedLocationManager). La recogida no se verifica
+     * porque en Traslado siempre es Cruz Verde. Única definición de la regla:
+     * la usan el filtro/selectores (PicapAutoAcceptPolicy) y la card (OrderCard).
+     */
+    fun isTrasladoDelivery(direccionEntrega: String, context: Context): Boolean =
+        direccionEntrega.contains("cruz verde", ignoreCase = true) ||
+            SavedLocationManager.findMatch(direccionEntrega, context) != null
 
     /**
      * Identifica pedidos OMS: el servicio debe decir "Cruz Verde Integración"
