@@ -33,7 +33,6 @@ object OrderStateManager {
     private const val KEY_WHATSAPP_AUTO_ACCEPT_DELAY_ENABLED = "whatsapp_auto_accept_delay_enabled"
     private const val KEY_WHATSAPP_AUTO_ACCEPT_DELAY_MS = "whatsapp_auto_accept_delay_ms"
     private const val KEY_PICAP_AUTO_ACCEPT_ENABLED = "picap_auto_accept_enabled"
-    private const val KEY_PICAP_AUTO_ACCEPT_FILTER = "picap_auto_accept_filter"
     private const val KEY_PICAP_AUTO_ACCEPT_TYPE_COND1 = "picap_auto_accept_type_cond1"
     private const val KEY_PICAP_AUTO_ACCEPT_TYPE_COND2 = "picap_auto_accept_type_cond2"
     private const val KEY_PICAP_AUTO_ACCEPT_TYPE_COND3 = "picap_auto_accept_type_cond3"
@@ -67,7 +66,6 @@ object OrderStateManager {
         _isWhatsAppAutoAcceptDelayEnabled.value = p.getBoolean(KEY_WHATSAPP_AUTO_ACCEPT_DELAY_ENABLED, false)
         _whatsappAutoAcceptDelayMs.value = p.getLong(KEY_WHATSAPP_AUTO_ACCEPT_DELAY_MS, 0L)
         _isPicapAutoAcceptEnabled.value = p.getBoolean(KEY_PICAP_AUTO_ACCEPT_ENABLED, false)
-        _picapAutoAcceptFilter.value = p.getString(KEY_PICAP_AUTO_ACCEPT_FILTER, "TODOS") ?: "TODOS"
         _picapAutoAcceptTypeCond1.value = p.getString(KEY_PICAP_AUTO_ACCEPT_TYPE_COND1, "TODOS") ?: "TODOS"
         _picapAutoAcceptTypeCond2.value = p.getString(KEY_PICAP_AUTO_ACCEPT_TYPE_COND2, "TODOS") ?: "TODOS"
         _picapAutoAcceptTypeCond3.value = p.getString(KEY_PICAP_AUTO_ACCEPT_TYPE_COND3, "TODOS") ?: "TODOS"
@@ -337,16 +335,6 @@ object OrderStateManager {
     fun setPicapAutoAcceptEnabled(enabled: Boolean) {
         _isPicapAutoAcceptEnabled.value = enabled
         prefs?.edit()?.putBoolean(KEY_PICAP_AUTO_ACCEPT_ENABLED, enabled)?.apply()
-    }
-
-    // Filtro de tipo de pedido a auto-aceptar (selector en la pestaña Picap)
-    // Valores: "OMS" | "MOSTRADOR" | "TODOS"
-    private val _picapAutoAcceptFilter = MutableStateFlow("TODOS")
-    val picapAutoAcceptFilter: StateFlow<String> = _picapAutoAcceptFilter.asStateFlow()
-
-    fun setPicapAutoAcceptFilter(filter: String) {
-        _picapAutoAcceptFilter.value = filter
-        prefs?.edit()?.putString(KEY_PICAP_AUTO_ACCEPT_FILTER, filter)?.apply()
     }
 
     // Tipo de pedido por condición de auto-aceptación Picap (selector bajo cada condición)

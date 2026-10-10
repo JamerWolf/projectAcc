@@ -22,34 +22,15 @@ class PicapAutoAcceptPolicy(private val context: Context) {
      * 1. Si ganancia >= 18000 COP → ACEPTAR SIEMPRE (sin importar km)
      * 2. Si ganancia >= 14000 COP Y km de recogida <= 4.5 → ACEPTAR
      * 3. Si km <= umbral seleccionado por el usuario → ACEPTAR (sin importar precio)
+     *
+     * El filtrado por tipo de pedido se hace únicamente por condición, mediante el
+     * selector de tipo de cada condición (ver [matchesOrderType]); no existe un
+     * filtro global previo.
      */
     fun shouldAutoAccept(order: PicapOrder): Boolean {
         // Chequeo de dirección Traslado diferido: se evalúa a lo sumo una vez por orden,
-        // tanto para el filtro global como para los selectores por condición.
+        // solo cuando el selector de tipo de alguna condición es TRASLADO.
         val trasladoOk = lazy { isTrasladoDeliveryOk(order) }
-
-        // Filtro de tipo de pedido (selector en la pestaña Picap): OMS / Mostrador / Traslado / Todos.
-        // Traslado (Picap lo muestra como Mostrador) solo pasa si la ENTREGA es Cruz Verde
-        // o una dirección guardada; TODOS acepta todo sin mirar dirección.
-        val serviceFilter = OrderStateManager.picapAutoAcceptFilter.value
-        when (serviceFilter) {
-            "OMS" -> if (!matchesOrderType(order, "OMS", trasladoOk)) {
-                Log.d(SERVICE_TAG, "AUTO-ACCEPT: Filtro OMS excluye servicio '${order.servicio}'. No aceptando.")
-                return false
-            }
-            "MOSTRADOR" -> if (!matchesOrderType(order, "MOSTRADOR", trasladoOk)) {
-                Log.d(SERVICE_TAG, "AUTO-ACCEPT: Filtro Mostrador excluye servicio '${order.servicio}'. No aceptando.")
-                return false
-            }
-            "TRASLADO" -> if (!matchesOrderType(order, "TRASLADO", trasladoOk)) {
-                Log.d(
-                    SERVICE_TAG,
-                    "AUTO-ACCEPT: Filtro Traslado - entrega '${order.direccionEntrega}' no es Cruz Verde ni direccion guardada. No aceptando."
-                )
-                return false
-            }
-            // "TODOS" u otro valor: acepta OMS, Mostrador y Traslado sin filtrar direccion
-        }
 
         val gananciaNum = order.ganancia
             .replace("COP", "")
@@ -109,7 +90,7 @@ class PicapAutoAcceptPolicy(private val context: Context) {
 
     /**
      * Decide si una orden coincide con un tipo de pedido ("OMS" | "MOSTRADOR" | "TRASLADO" | "TODOS").
-     * Lógica compartida por el filtro global y los selectores de tipo por condición.
+     * Lógica compartida por los selectores de tipo por condición.
      * Sistema binario: "OMS" solo si el servicio dice "Cruz Verde Integración" (con o sin
      * acento); "MOSTRADOR" es todo lo que no sea OMS. Exclusivos entre sí.
      * "TRASLADO" delega en [isTrasladoDeliveryOk] (evaluación diferida vía [trasladoOk]).

@@ -602,7 +602,7 @@ fun SettingsScreen(
 
 /**
  * Selector de tipo de pedido para cada condición de auto-aceptación Picap.
- * Repite el patrón visual del filtro global (SingleChoiceSegmentedButtonRow) en MainActivity.
+ * Usa SingleChoiceSegmentedButtonRow con las opciones OMS / Mostrador / Traslado / Todos.
  */
 @Composable
 private fun OrderTypeSelector(
