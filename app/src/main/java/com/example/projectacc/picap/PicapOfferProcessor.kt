@@ -303,9 +303,6 @@ class PicapOfferProcessor(
             hideOverlayOnMain()
             return
         }
-        if (!isPoll) {
-            Log.d(SERVICE_TAG, "PICAP: evento tipo=$eventType con ${picapWindows.size} ventana(s).")
-        }
 
         // --- MODO AUTO-CLIC EN LISTA ---
         if (OrderStateManager.isAutoClickEnabled.value) {
