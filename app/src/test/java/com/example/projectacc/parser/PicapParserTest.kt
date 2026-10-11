@@ -74,4 +74,31 @@ class PicapParserTest {
         assertEquals(0.45, order.kmRecogida, 0.001)
         assertEquals(2.0, order.kmEntrega, 0.001)
     }
+
+    @Test
+    fun `entrega corta sin prefijo A con metros decimales (Picap 2026-10)`() {
+        val texts = listOf(
+            "Tu ganancia final",
+            "4.658 COP",
+            "Cruz Verde Mostrador",
+            "Usuario frecuente",
+            "ID: eed80",
+            "A 9 mins (3.79 km)",
+            "Parroquia San Luis Gonzaga, Cucuta",
+            "Menos de un minuto (259.9 m)",
+            "Conjunto Los Mangos, Cucuta"
+        )
+
+        val order = PicapParser.parseOrder(texts)
+
+        // El nuevo popup ya no escribe "A " ni "min (" en la entrega corta.
+        assertEquals("eed80", order.id)
+        assertEquals("A 9 mins (3.79 km)", order.tiempoRecogida)
+        assertEquals("Parroquia San Luis Gonzaga, Cucuta", order.direccionRecogida)
+        assertEquals("Menos de un minuto (259.9 m)", order.tiempoEntrega)
+        assertEquals("Conjunto Los Mangos, Cucuta", order.direccionEntrega)
+        assertEquals(3.79, order.kmRecogida, 0.001)
+        assertEquals(0.2599, order.kmEntrega, 0.001)
+        assertEquals("Cruz Verde Mostrador", order.servicio)
+    }
 }

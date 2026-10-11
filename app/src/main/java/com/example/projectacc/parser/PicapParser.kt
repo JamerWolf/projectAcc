@@ -40,9 +40,11 @@ object PicapParser {
             // Entrega clásica: "X min(s) (X km)" que NO empieza por "A ".
             val isDeliveryClassic =
                 (current.contains("min (") || current.contains("mins (")) && !current.startsWith("A ")
-            // Entrega corta: forma "A ..." ya consumida por la recogida y con km entre paréntesis
-            // (el paréntesis la distingue de una dirección que empiece por "A ").
-            val isDeliveryShort = isALine && tiempoRec.isNotEmpty() && kmParensRegex.containsMatchIn(current)
+            // Entrega corta: km entre paréntesis cuando la recogida ya está capturada.
+            // El paréntesis distingue la línea de una dirección; cubre la forma vieja
+            // "A menos de un minuto (890m)" y la forma nueva de Picap 2026-10
+            // "Menos de un minuto (259.9 m)" que ya NO lleva el prefijo "A ".
+            val isDeliveryShort = tiempoRec.isNotEmpty() && kmParensRegex.containsMatchIn(current)
 
             if (isALine && tiempoRec.isEmpty() && i + 1 < texts.size) {
                 tiempoRec = current

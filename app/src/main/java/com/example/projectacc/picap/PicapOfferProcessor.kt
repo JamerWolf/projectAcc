@@ -1,6 +1,9 @@
 package com.example.projectacc.picap
 
+import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.GestureDescription
 import android.content.Context
+import android.graphics.Path
 import android.graphics.Rect
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
@@ -14,11 +17,15 @@ import com.example.projectacc.parser.PicapParser
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.coroutines.resume
 
-private const val TREE_DEBUG = false
+private const val TREE_DEBUG = true
 
 /**
  * Snapshot de un nodo recolectado por el escaneo único: contentDescription
@@ -26,9 +33,12 @@ private const val TREE_DEBUG = false
  * KmOverlay antes buscaba con su propio recorrido del árbol.
  */
 private class PicapNodeSnapshot(
+    val className: String,
     val contentDescription: String?,
     val text: String,
     val bounds: Rect,
+    val clickable: Boolean,
+    val enabled: Boolean,
 )
 
 /**
@@ -60,6 +70,37 @@ private class PicapScanResult(
         return null
     }
 
+    /**
+     * Bounds del primer nodo (pre-orden) cuyo text o contentDescription contiene
+     * "Aceptar" y tiene bounds no vacíos. Materia prima del tap de gesto de
+     * respaldo cuando ACTION_CLICK no llega a la vista real del botón.
+     */
+    fun boundsForAcceptLabel(): Rect? {
+        for (n in nodes) {
+            if (!n.bounds.isEmpty &&
+                (n.text.contains("Aceptar", ignoreCase = true) ||
+                        n.contentDescription?.contains("Aceptar", ignoreCase = true) == true)
+            ) {
+                return n.bounds
+            }
+        }
+        return null
+    }
+
+    /**
+     * Descripción de los nodos cuyos bounds contienen el punto dado: sirve para
+     * correlacionar la posición exacta del tap de la sonda TAP-PROBE con las
+     * vistas reales del árbol en esa zona.
+     */
+    fun describeNodesAt(x: Float, y: Float): List<String> = nodes.filter {
+        !it.bounds.isEmpty &&
+            x >= it.bounds.left && x <= it.bounds.right &&
+            y >= it.bounds.top && y <= it.bounds.bottom
+    }.map {
+        "[${it.className}] clickable=${it.clickable} enabled=${it.enabled} " +
+            "text=\"${it.text}\" cd=\"${it.contentDescription}\" bounds=${it.bounds}"
+    }
+
     /** Recicla todos los candidatos salvo la raíz (propiedad del caller). */
     fun recycle() {
         for (n in acceptCandidates) {
@@ -89,6 +130,7 @@ class PicapOfferProcessor(
     private val policy: PicapAutoAcceptPolicy,
     private val autoclicker: PicapListAutoclicker,
     private val closer: PicapOfferCloser,
+    private val probe: TouchProbeOverlay,
 ) {
 
     // Almacena el último porcentaje detectado para evitar logs repetitivos de la misma barra
@@ -102,12 +144,82 @@ class PicapOfferProcessor(
     private var lastClickTime: Long = 0L
     private val CLICK_COOLDOWN_MS = 2000L
 
+    // Re-clic para la MISMA orden pendiente: el éxito real es el CIERRE del
+    // popup, no el return de performAction (probado mentiroso en el botón
+    // 2026-10). Se reintenta con la cadencia de los scans.
+    private val CLICK_RETRY_MIN_INTERVAL_MS = 500L
+    // Ventana máxima con el popup visible re-clickeando antes de rendirse
+    // (el usuario puede querer decidir a mano).
+    private val PENDING_ACCEPT_TIMEOUT_MS = 15_000L
+
+    // Máx. de niveles de padres a subir probando ACTION_CLICK del nodo "Aceptar"
+    // (el botón animado suele ser un contenedor; en Compose la cadena puede ser
+    // larga, por eso el tope generoso).
+    private val MAX_PARENT_HOPS = 12
+
+    // Gesture de respaldo: tap físico en el centro del nodo "Aceptar" cuando
+    // ACTION_CLICK no llega a la vista real. Requiere canPerformGestures=true.
+    private val GESTURE_TAP_DURATION_MS = 100L
+    private val GESTURE_TIMEOUT_MS = 1500L
+
+    // Fallback de polling: la animación del botón ya no genera eventos de
+    // accesibilidad (la barra de porcentaje desapareció en el update de Picap),
+    // así que el pipeline se auto-dispara cada 750 ms mientras haya ventanas
+    // de Picap visibles. Los ticks se marcan con EVENT_TYPE_POLL para silenciar
+    // los logs rutinarios.
+    private val PICAP_POLL_INTERVAL_MS = 750L
+    private val EVENT_TYPE_POLL = -1
+
     // --- Single-flight: CONFINED AL MAIN THREAD (ver THREADING CONTRACT) ---
     private var scanInFlight = false
     private var scanPending = false
 
     // Último eventType visto; el evento no se retiene más allá del callback.
     private var latestEventType: Int = 0
+
+    // Estado de auto-accept pendiente de confirmación (solo pipeline, serializado
+    // por single-flight en Default): el click se despacha pero la orden se
+    // registra recién cuando el popup de ESA orden desaparece.
+    private var pendingAcceptOrderId: String? = null
+    private var pendingAcceptOrder: PicapOrder? = null
+    private var pendingAcceptAttempts: Int = 0
+    private var pendingAcceptStart: Long = 0L
+
+    // Si dispatchGesture falla en este dispositivo (flag canPerformGestures
+    // ausente), se cae a performAction como red de compatibilidad.
+    private var gestureUnavailable = false
+
+    /**
+     * Registra la orden pendiente como auto-aceptada: su popup desapareció
+     * después de los intentos de clic (la única confirmación disponible).
+     */
+    private suspend fun confirmPendingAccept(reason: String) {
+        val order = pendingAcceptOrder
+        if (order == null) {
+            pendingAcceptOrderId = null
+            return
+        }
+        pendingAcceptOrderId = null
+        pendingAcceptOrder = null
+        pendingAcceptAttempts = 0
+        withContext(Dispatchers.Main) { probe.hide() }
+        Log.i(
+            SERVICE_TAG,
+            "AUTO-ACCEPT: Popup de orden #${order.id} desapareció ($reason); registrada como auto-aceptada."
+        )
+        OrderHistoryManager.addOrder(order, context)
+    }
+
+    /** Descarta el pendiente sin registrar (timeout o popup reemplazado). */
+    private suspend fun abandonPendingAccept(reason: String) {
+        if (pendingAcceptOrderId != null) {
+            Log.i(SERVICE_TAG, "AUTO-ACCEPT: Pendiente #${pendingAcceptOrderId} descartada ($reason).")
+        }
+        pendingAcceptOrderId = null
+        pendingAcceptOrder = null
+        pendingAcceptAttempts = 0
+        withContext(Dispatchers.Main) { probe.hide() }
+    }
 
     /**
      * Entry point en MAIN THREAD (onAccessibilityEvent). El objeto evento es
@@ -116,13 +228,39 @@ class PicapOfferProcessor(
      * solo se levanta el flag de trailing edge: no se encola un segundo escaneo.
      */
     fun handlePicapEvent(event: AccessibilityEvent) {
-        latestEventType = event.eventType
+        requestScan(event.eventType)
+    }
+
+    /**
+     * Inicia un escaneo con single-flight; [eventType] solo alimenta los logs
+     * (EVENT_TYPE_POLL marca los ticks del polling de respaldo). Debe invocarse
+     * en Main para respetar el confinamiento de los flags de vuelo.
+     */
+    private fun requestScan(eventType: Int) {
+        latestEventType = eventType
         if (scanInFlight) {
             scanPending = true
             return
         }
         scanInFlight = true
         launchScan()
+    }
+
+    init {
+        // Polling de respaldo (ver PICAP_POLL_INTERVAL_MS). Corre en [scope];
+        // primero pregunta barato si hay ventanas de Picap y solo entonces
+        // pide un escaneo, posteados a Main para respetar el threading contract.
+        scope.launch {
+            while (isActive) {
+                delay(PICAP_POLL_INTERVAL_MS)
+                val windows = picapWindows()
+                val hasWindows = windows.isNotEmpty()
+                windows.forEach { it.recycle() }
+                if (hasWindows) {
+                    withContext(Dispatchers.Main) { requestScan(EVENT_TYPE_POLL) }
+                }
+            }
+        }
     }
 
     private fun launchScan() {
@@ -153,14 +291,21 @@ class PicapOfferProcessor(
     }
 
     private suspend fun runPicapPipeline(eventType: Int) {
+        val isPoll = eventType == EVENT_TYPE_POLL
         val picapWindows = picapWindows()
         if (picapWindows.isEmpty()) {
             // Sin ventanas de Picap visibles: el popup de servicio ya no existe
-            Log.d(SERVICE_TAG, "PICAP: evento tipo=$eventType sin ventanas visibles; se ignora.")
+            if (!isPoll) {
+                Log.d(SERVICE_TAG, "PICAP: evento tipo=$eventType sin ventanas visibles; se ignora.")
+            }
+            confirmPendingAccept("sin ventanas de Picap")
+            withContext(Dispatchers.Main) { probe.hide() }
             hideOverlayOnMain()
             return
         }
-        Log.d(SERVICE_TAG, "PICAP: evento tipo=$eventType con ${picapWindows.size} ventana(s).")
+        if (!isPoll) {
+            Log.d(SERVICE_TAG, "PICAP: evento tipo=$eventType con ${picapWindows.size} ventana(s).")
+        }
 
         // --- MODO AUTO-CLIC EN LISTA ---
         if (OrderStateManager.isAutoClickEnabled.value) {
@@ -215,7 +360,6 @@ class PicapOfferProcessor(
             scan.recycle()
             rootNode.recycle()
         }
-        Log.d(SERVICE_TAG, "PICAP: sin orden nueva en esta pasada (tipo=$eventType).")
     }
 
     /**
@@ -224,20 +368,36 @@ class PicapOfferProcessor(
      * no queda entre el parseo y el clic). Retorna true si se procesó una orden válida.
      */
     private suspend fun processPicapWindow(rootNode: AccessibilityNodeInfo, scan: PicapScanResult): Boolean {
-        // 1. GENERAR EL LOG VISUAL DEL ÁRBOL
-        if (TREE_DEBUG) {
-            AccessibilityTree.logginTree(rootNode)
-        }
-
-        // 2. EXTRAER DATOS PARA EL MODELO ORDER (lista plana del único DFS)
+        // 1. EXTRAER DATOS PARA EL MODELO ORDER (lista plana del único DFS)
         val nodesContent = scan.contentDescriptions
         val order = PicapParser.parseOrder(nodesContent)
 
         // Si no hay ID, no es una orden válida
         if (order.id.isEmpty()) {
+            confirmPendingAccept("popup sin ID de orden")
+            withContext(Dispatchers.Main) { probe.hide() }
             hideOverlayOnMain()
-            Log.d(SERVICE_TAG, "PICAP: ventana sin ID de orden; no se procesa (servicio='${order.servicio}').")
             return false
+        }
+
+        // Popup de orden vivo: sonda táctil activa (idempotente) para registrar
+        // la posición exacta de los taps del usuario y correlacionarla con el
+        // árbol (describeNodesAt). Sirve también con auto-accept OFF.
+        withContext(Dispatchers.Main) { probe.show() }
+        val tap = probe.consumeLastTap()
+        if (tap != null) {
+            val hits = scan.describeNodesAt(tap.first, tap.second)
+            Log.i(
+                SERVICE_TAG,
+                "TAP-PROBE: tap en (${tap.first}, ${tap.second}) cayó sobre ${hits.size} nodo(s): ${hits.joinToString(" | ")}"
+            )
+        }
+
+        // 2. LOG VISUAL DEL ÁRBOL: solo cuando hay una orden real (con ID),
+        //    es decir cuando "sale" una orden en Picap. Antes se loggeaba en
+        //    cada ventana procesada y se desactivó por costo (commit 0f6abf8).
+        if (TREE_DEBUG) {
+            AccessibilityTree.logginTree(rootNode)
         }
 
         // --- NO CRUZ VERDE: sin el nodo de servicio "Cruz Verde ..." (servicio vacío)
@@ -256,19 +416,56 @@ class PicapOfferProcessor(
             return false
         }
 
-        // --- AUTO-ACCEPT: Evaluar siempre que haya ID, sin importar si es la misma orden ---
-        // El intento de clic ocurre ANTES del overlay para no meter un layout pass
-        // entre el parseo y el clic.
-        var clicked = false
+        // --- AUTO-ACCEPT ---
+        // El click despachado NO confirma la aceptación: performAction puede
+        // retornar true aunque la vista real del botón ignora el clic (botón
+        // animado 2026-10 / delegate anti-automatización). Se re-intenta mientras
+        // el popup de ESTA orden siga visible (cadencia de los scans) y se
+        // registra recién cuando el popup desaparece (confirmPendingAccept).
         if (OrderStateManager.isPicapAutoAcceptEnabled.value && policy.shouldAutoAccept(order)) {
             val now = System.currentTimeMillis()
-            if (now - lastClickTime >= CLICK_COOLDOWN_MS) {
-                Log.d(SERVICE_TAG, "AUTO-ACCEPT: Orden califica para auto-acept. Buscando botón...")
-                if (clickAcceptCandidates(scan)) {
-                    lastClickTime = System.currentTimeMillis()
-                    Log.i(SERVICE_TAG, "AUTO-ACCEPT: Orden auto-aceptada! No se mostrara en UI.")
-                    OrderHistoryManager.addOrder(order, context)
-                    clicked = true
+            if (pendingAcceptOrderId != null && order.id != pendingAcceptOrderId) {
+                // El popup pendiente fue reemplazado por otra oferta: no se registra.
+                abandonPendingAccept("reemplazada por #${order.id}")
+            }
+            if (order.id == pendingAcceptOrderId && now - pendingAcceptStart > PENDING_ACCEPT_TIMEOUT_MS) {
+                abandonPendingAccept("timeout de $PENDING_ACCEPT_TIMEOUT_MS ms con popup visible")
+            }
+            val isPending = order.id == pendingAcceptOrderId
+            val interval = if (isPending) CLICK_RETRY_MIN_INTERVAL_MS else CLICK_COOLDOWN_MS
+            if (now - lastClickTime >= interval) {
+                Log.d(
+                    SERVICE_TAG,
+                    "AUTO-ACCEPT: Orden #${order.id} califica (intento ${pendingAcceptAttempts + 1}, pendiente=$isPending)."
+                )
+                // Gesto físico DIRECTO como primer recurso: performAction es un
+                // probado mentiroso en el botón 2026-10 (retorna true sin clic
+                // real) y el tap físico funciona en cualquier versión del popup.
+                // El bounds del botón viene del scan fresco de este tick.
+                val dispatched = if (!gestureUnavailable) {
+                    val gestureOk = clickAcceptByGesture(scan)
+                    if (!gestureOk) {
+                        // Gesto no disponible en el dispositivo: performAction de respaldo.
+                        gestureUnavailable = true
+                        clickAcceptCandidates(scan)
+                    } else {
+                        true
+                    }
+                } else {
+                    clickAcceptCandidates(scan)
+                }
+                if (dispatched) {
+                    lastClickTime = now
+                    if (!isPending) {
+                        pendingAcceptStart = now
+                        pendingAcceptOrder = order
+                    }
+                    pendingAcceptOrderId = order.id
+                    pendingAcceptAttempts++
+                    Log.i(
+                        SERVICE_TAG,
+                        "AUTO-ACCEPT: Click despachado en #${order.id} (intento ${pendingAcceptAttempts}); esperando cierre del popup para confirmar."
+                    )
                 }
             } else {
                 Log.d(SERVICE_TAG, "AUTO-ACCEPT: En cooldown, esperando...")
@@ -277,15 +474,16 @@ class PicapOfferProcessor(
 
         // --- OVERLAY: km totales junto al nodo del precio ---
         // Se actualiza en cada evento (misma orden o nueva) para refrescar posición/texto.
-        // SIEMPRE después de la decisión de clic: condiciones no cumplidas, cooldown,
-        // auto-accept off, sin botón y clic exitoso (update + hide en el mismo hop de
-        // main, para que no entre un frame entre ambos).
+        // SIEMPRE después de la decisión de clic (condiciones no cumplidas,
+        // cooldown o click despachado).
         val anchor = scan.boundsForContentDescription(order.ganancia)
         withContext(Dispatchers.Main) {
             overlay.updateKmOverlay(anchor, order)
-            if (clicked) overlay.hideKmOverlay()
         }
-        if (clicked) return true
+
+        // Orden con click ya despachado: se reintenta en cada scan y se confirma
+        // al cerrarse el popup; todavía no se registra en UI ni en historial.
+        if (order.id == pendingAcceptOrderId) return true
 
         // Actualizar UI solo si es una orden nueva basada en el ID
         if (order.id != lastOrder?.id) {
@@ -309,29 +507,96 @@ class PicapOfferProcessor(
 
     /**
      * Click phase del escaneo único: recorre [PicapScanResult.acceptCandidates]
-     * en orden de recorrido y reproduce la secuencia del findAndClickAcceptButton
-     * original por candidato (log → clic directo → clic en el padre).
+     * en orden de recorrido y por cada candidato sube la cadena de padres
+     * (máx. [MAX_PARENT_HOPS]) probando performAction en el nodo y en cada
+     * ancestro. El gate de isClickable se eliminó: performAction en un nodo sin
+     * la acción retorna false y sigue, así que el intento directo cubre nodos
+     * con la acción expuesta aunque isClickable diga lo contrario.
      * Retorna true si logró hacer clic.
      */
     private fun clickAcceptCandidates(scan: PicapScanResult): Boolean {
         for (node in scan.acceptCandidates) {
-            Log.d(SERVICE_TAG, "AUTO-ACCEPT: Botón 'Aceptar' encontrado. Intentando clic...")
-            if (node.isClickable) {
-                val result = node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                if (result) {
-                    Log.d(SERVICE_TAG, "AUTO-ACCEPT: Clic exitoso en botón Aceptar!")
+            val actions = node.actionList.joinToString(";") { "id=${it.id} label=${it.label}" }
+            Log.d(
+                SERVICE_TAG,
+                "AUTO-ACCEPT: Candidato 'Aceptar' (class=${node.className}, clickable=${node.isClickable}, enabled=${node.isEnabled}, actions=[$actions]). Intentando clic..."
+            )
+            if (node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                Log.d(SERVICE_TAG, "AUTO-ACCEPT: Clic exitoso en botón Aceptar!")
+                return true
+            }
+            var parent = node.parent
+            var hops = 0
+            while (parent != null && hops < MAX_PARENT_HOPS) {
+                if (parent.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                    Log.d(SERVICE_TAG, "AUTO-ACCEPT: Clic exitoso en ancestro (hops=$hops, class=${parent.className}).")
+                    parent.recycle()
                     return true
                 }
-            }
-            // Intentar con el padre
-            val parent = node.parent
-            if (parent != null && parent.isClickable) {
-                val result = parent.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                val next = parent.parent
                 parent.recycle()
-                if (result) return true
+                parent = next
+                hops++
             }
+            parent?.recycle()
         }
+        Log.w(
+            SERVICE_TAG,
+            "AUTO-ACCEPT: ${scan.acceptCandidates.size} candidato(s) 'Aceptar' sin clic efectivo vía ACTION_CLICK; probando gesto..."
+        )
         return false
+    }
+
+    /**
+     * Tap de respaldo vía dispatchGesture: si ACTION_CLICK no llega a la vista
+     * real (botón animado custom que no expone la acción de accesibilidad), se
+     * despacha un toque físico en el centro del nodo "Aceptar" usando los bounds
+     * del scan. Requiere android:canPerformGestures="true" en el service config.
+     * Con timeout: si el sistema no confirma el gesto, se libera el vuelo.
+     */
+    private suspend fun clickAcceptByGesture(scan: PicapScanResult): Boolean {
+        val service = context as? AccessibilityService ?: return false
+        val bounds = scan.boundsForAcceptLabel() ?: run {
+            Log.w(SERVICE_TAG, "AUTO-ACCEPT: Gesto abortado; ningún nodo con 'Aceptar' y bounds válidos.")
+            return false
+        }
+        val cx = bounds.centerX().toFloat()
+        val cy = bounds.centerY().toFloat()
+        Log.d(SERVICE_TAG, "AUTO-ACCEPT: Despachando gesto de respaldo en ($cx, $cy)...")
+        val result = withTimeoutOrNull(GESTURE_TIMEOUT_MS) {
+            withContext(Dispatchers.Main) {
+                suspendCancellableCoroutine { cont ->
+                    val path = Path().apply { moveTo(cx, cy) }
+                    val gesture = GestureDescription.Builder()
+                        .addStroke(GestureDescription.StrokeDescription(path, 0, GESTURE_TAP_DURATION_MS))
+                        .build()
+                    val dispatched = try {
+                        service.dispatchGesture(
+                            gesture,
+                            object : AccessibilityService.GestureResultCallback() {
+                                override fun onCompleted(gestureDescription: GestureDescription) {
+                                    if (cont.isActive) cont.resume(true)
+                                }
+
+                                override fun onCancelled(gestureDescription: GestureDescription) {
+                                    Log.w(SERVICE_TAG, "AUTO-ACCEPT: Gesto cancelado por el sistema.")
+                                    if (cont.isActive) cont.resume(false)
+                                }
+                            },
+                            null
+                        )
+                    } catch (e: Exception) {
+                        Log.w(SERVICE_TAG, "AUTO-ACCEPT: dispatchGesture falló: ${e.message}")
+                        false
+                    }
+                    if (!dispatched && cont.isActive) {
+                        cont.resume(false)
+                    }
+                }
+            }
+        } ?: false
+        Log.d(SERVICE_TAG, "AUTO-ACCEPT: Gesto de respaldo resultado=$result.")
+        return result
     }
 
     /**
@@ -364,16 +629,30 @@ class PicapOfferProcessor(
             // Flatten de contentDescriptions no vacías (input del parseo y de marcadores).
             if (cd.isNotEmpty()) content.add(cd)
 
-            // Snapshot CD+text+bounds de cada nodo (ancla del overlay).
+            // Snapshot CD+text+bounds+clase de cada nodo (ancla del overlay y
+            // correlación del tap de la sonda TAP-PROBE).
+            val className = node.className?.toString() ?: ""
             val bounds = Rect()
             node.getBoundsInScreen(bounds)
-            snapshots.add(PicapNodeSnapshot(rawCd, text, bounds))
+            snapshots.add(
+                PicapNodeSnapshot(
+                    className = className,
+                    contentDescription = rawCd,
+                    text = text,
+                    bounds = bounds,
+                    clickable = node.isClickable,
+                    enabled = node.isEnabled,
+                )
+            )
 
-            // Candidato al botón Aceptar: mismo predicado que findAndClickAcceptButton.
-            val className = node.className?.toString() ?: ""
-            val isAcceptButton = (className.contains("Button") || className.contains("TextView")) &&
-                    (text.contains("Aceptar", ignoreCase = true) ||
-                            cd.contains("Aceptar", ignoreCase = true))
+            // Candidato al botón Aceptar: cualquier nodo con "Aceptar" en text o
+            // contentDescription. El popup 2026-10 renderiza el botón en un
+            // contenedor custom (el relleno animado vive en otra vista) y la
+            // clase ya no es confiable (puede no ser Button/TextView): el
+            // primer-match en pre-orden más la cadena de padres alcanza.
+            val isAcceptButton =
+                text.contains("Aceptar", ignoreCase = true) ||
+                        cd.contains("Aceptar", ignoreCase = true)
             if (isAcceptButton) candidates.add(node)
 
             for (i in 0 until node.childCount) {
