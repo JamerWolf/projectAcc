@@ -536,6 +536,34 @@ fun PicapContent(
             )
         }
 
+        // Replay de oferta: re-envía el contentIntent de la última notificación
+        // "Nuevo servicio" guardada para que Picap reabra la oferta a demanda
+        // (probar en campo sin esperar un pedido nuevo).
+        var replayState by remember { mutableStateOf("Última oferta: " + if (PicapIntentHolder.savedAt > 0) "guardada" else "aún sin guardar") }
+        Button(
+            onClick = {
+                val pendingIntent = PicapIntentHolder.lastContentIntent
+                if (pendingIntent == null) {
+                    replayState = "Sin oferta guardada todavía (llegó alguna notificación 'Nuevo servicio'?)"
+                } else {
+                    try {
+                        pendingIntent.send()
+                        replayState = "Oferta reabierta (era: ${PicapIntentHolder.lastTitle})"
+                    } catch (e: Exception) {
+                        replayState = "Error al reabrir: ${e.message}"
+                    }
+                }
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Reabrir última oferta de Picap")
+        }
+        Text(
+            text = replayState,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
         Spacer(modifier = Modifier.height(16.dp))
 
         Divider()

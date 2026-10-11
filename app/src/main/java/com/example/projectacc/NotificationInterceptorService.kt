@@ -55,6 +55,15 @@ class NotificationInterceptorService : NotificationListenerService() {
 
         if (!title.startsWith("Nuevo servicio", ignoreCase = true)) return
 
+        // Guardar el último contentIntent SIEMPRE que llega una oferta (aunque
+        // el switch esté off): habilita el replay desde la UI (PicapIntentHolder).
+        notification.contentIntent?.let {
+            PicapIntentHolder.lastContentIntent = it
+            PicapIntentHolder.lastTitle = title
+            PicapIntentHolder.savedAt = System.currentTimeMillis()
+            Log.d(TAG, "PICAP-REPLAY: contentIntent de '$title' guardado para replay.")
+        }
+
         if (!OrderStateManager.isNotificationClickEnabled.value) {
             Log.d(TAG, "Switch de notificaciones DESACTIVADO. Ignorando.")
             return
