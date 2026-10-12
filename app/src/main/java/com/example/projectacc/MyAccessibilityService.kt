@@ -12,7 +12,6 @@ import com.example.projectacc.picap.PicapEventThrottle
 import com.example.projectacc.picap.PicapListAutoclicker
 import com.example.projectacc.picap.PicapOfferCloser
 import com.example.projectacc.picap.PicapOfferProcessor
-import com.example.projectacc.picap.TouchProbeOverlay
 import com.example.projectacc.whatsapp.WhatsAppResponder
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -59,7 +58,6 @@ class MyAccessibilityService : AccessibilityService() {
     )
     private val autoAcceptPolicy = PicapAutoAcceptPolicy(this)
     private val listAutoclicker = PicapListAutoclicker()
-    private val touchProbe = TouchProbeOverlay(this)
     private val offerProcessor = PicapOfferProcessor(
         this,
         serviceScope,
@@ -68,7 +66,6 @@ class MyAccessibilityService : AccessibilityService() {
         autoAcceptPolicy,
         listAutoclicker,
         offerCloser,
-        touchProbe,
     )
     private val whatsappResponder = WhatsAppResponder(
         serviceScope,
@@ -125,7 +122,6 @@ class MyAccessibilityService : AccessibilityService() {
 
     override fun onDestroy() {
         kmOverlay.hideKmOverlay()
-        touchProbe.hide()
         serviceScope.cancel()
         floatingPopup?.dismiss()
         floatingPopup = null

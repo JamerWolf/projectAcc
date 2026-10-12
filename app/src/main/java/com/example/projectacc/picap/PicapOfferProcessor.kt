@@ -87,20 +87,6 @@ private class PicapScanResult(
         return null
     }
 
-    /**
-     * Descripción de los nodos cuyos bounds contienen el punto dado: sirve para
-     * correlacionar la posición exacta del tap de la sonda TAP-PROBE con las
-     * vistas reales del árbol en esa zona.
-     */
-    fun describeNodesAt(x: Float, y: Float): List<String> = nodes.filter {
-        !it.bounds.isEmpty &&
-            x >= it.bounds.left && x <= it.bounds.right &&
-            y >= it.bounds.top && y <= it.bounds.bottom
-    }.map {
-        "[${it.className}] clickable=${it.clickable} enabled=${it.enabled} " +
-            "text=\"${it.text}\" cd=\"${it.contentDescription}\" bounds=${it.bounds}"
-    }
-
     /** Recicla todos los candidatos salvo la raíz (propiedad del caller). */
     fun recycle() {
         for (n in acceptCandidates) {
@@ -130,7 +116,6 @@ class PicapOfferProcessor(
     private val policy: PicapAutoAcceptPolicy,
     private val autoclicker: PicapListAutoclicker,
     private val closer: PicapOfferCloser,
-    private val probe: TouchProbeOverlay,
 ) {
 
     // Almacena el último porcentaje detectado para evitar logs repetitivos de la misma barra
@@ -202,7 +187,6 @@ class PicapOfferProcessor(
         pendingAcceptOrderId = null
         pendingAcceptOrder = null
         pendingAcceptAttempts = 0
-        withContext(Dispatchers.Main) { probe.hide() }
         Log.i(
             SERVICE_TAG,
             "AUTO-ACCEPT: Popup de orden #${order.id} desapareció ($reason); registrada como auto-aceptada."
@@ -218,7 +202,6 @@ class PicapOfferProcessor(
         pendingAcceptOrderId = null
         pendingAcceptOrder = null
         pendingAcceptAttempts = 0
-        withContext(Dispatchers.Main) { probe.hide() }
     }
 
     /**
@@ -299,7 +282,6 @@ class PicapOfferProcessor(
                 Log.d(SERVICE_TAG, "PICAP: evento tipo=$eventType sin ventanas visibles; se ignora.")
             }
             confirmPendingAccept("sin ventanas de Picap")
-            withContext(Dispatchers.Main) { probe.hide() }
             hideOverlayOnMain()
             return
         }
@@ -372,22 +354,8 @@ class PicapOfferProcessor(
         // Si no hay ID, no es una orden válida
         if (order.id.isEmpty()) {
             confirmPendingAccept("popup sin ID de orden")
-            withContext(Dispatchers.Main) { probe.hide() }
             hideOverlayOnMain()
             return false
-        }
-
-        // Popup de orden vivo: sonda táctil activa (idempotente) para registrar
-        // la posición exacta de los taps del usuario y correlacionarla con el
-        // árbol (describeNodesAt). Sirve también con auto-accept OFF.
-        withContext(Dispatchers.Main) { probe.show() }
-        val tap = probe.consumeLastTap()
-        if (tap != null) {
-            val hits = scan.describeNodesAt(tap.first, tap.second)
-            Log.i(
-                SERVICE_TAG,
-                "TAP-PROBE: tap en (${tap.first}, ${tap.second}) cayó sobre ${hits.size} nodo(s): ${hits.joinToString(" | ")}"
-            )
         }
 
         // 2. LOG VISUAL DEL ÁRBOL: solo cuando hay una orden real (con ID),
@@ -626,8 +594,7 @@ class PicapOfferProcessor(
             // Flatten de contentDescriptions no vacías (input del parseo y de marcadores).
             if (cd.isNotEmpty()) content.add(cd)
 
-            // Snapshot CD+text+bounds+clase de cada nodo (ancla del overlay y
-            // correlación del tap de la sonda TAP-PROBE).
+            // Snapshot CD+text+bounds+clase de cada nodo (ancla del overlay).
             val className = node.className?.toString() ?: ""
             val bounds = Rect()
             node.getBoundsInScreen(bounds)
