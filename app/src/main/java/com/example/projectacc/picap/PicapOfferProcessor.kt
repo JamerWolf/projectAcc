@@ -28,9 +28,27 @@ import kotlin.coroutines.resume
 private const val TREE_DEBUG = true
 
 /**
+ * El botón del popup renderiza EXACTAMENTE la etiqueta "Aceptar" (trim +
+ * ignore case) en text o contentDescription. El match por subcadena era
+ * letal: el banner de filtro de Picap "No cumple tus filtros de
+ * autoaceptar" contiene "aceptar" y va ANTES del botón en pre-orden, así
+ * que los bounds del tap y ACTION_CLICK apuntaban al banner y el gesto
+ * caía sobre texto plano (regresión v1.0.2, orden #db527: 19 taps en
+ * (518,1336) sin cerrar el popup; el botón real vive en ~(540,2157)).
+ */
+internal fun isAcceptButtonLabel(text: String, contentDescription: String?): Boolean =
+    text.trim().equals("Aceptar", ignoreCase = true) ||
+            contentDescription?.trim()?.equals("Aceptar", ignoreCase = true) == true
+
+/** Contiene "aceptar" en cualquier parte. SOLO para diagnóstico de campo. */
+internal fun isAcceptLikeLabel(text: String, contentDescription: String?): Boolean =
+    text.contains("Aceptar", ignoreCase = true) ||
+            contentDescription?.contains("Aceptar", ignoreCase = true) == true
+
+/**
  * Snapshot de un nodo recolectado por el escaneo único: contentDescription
- * crudo (null preservado), text y bounds en pantalla. Es la materia prima que
- * KmOverlay antes buscaba con su propio recorrido del árbol.
+ * crudo (null preservado), text, bounds y flags en pantalla. Es la materia
+ * prima que KmOverlay antes buscaba con su propio recorrido del árbol.
  */
 private class PicapNodeSnapshot(
     val className: String,
@@ -39,6 +57,7 @@ private class PicapNodeSnapshot(
     val bounds: Rect,
     val clickable: Boolean,
     val enabled: Boolean,
+    val visibleToUser: Boolean,
 )
 
 /**
@@ -71,20 +90,33 @@ private class PicapScanResult(
     }
 
     /**
-     * Bounds del primer nodo (pre-orden) cuyo text o contentDescription contiene
-     * "Aceptar" y tiene bounds no vacíos. Materia prima del tap de gesto de
-     * respaldo cuando ACTION_CLICK no llega a la vista real del botón.
+     * Primer nodo (pre-orden) con label EXACTO "Aceptar" y bounds no vacíos:
+     * materia prima del tap de gesto y de ACTION_CLICK.
      */
-    fun boundsForAcceptLabel(): Rect? {
-        for (n in nodes) {
-            if (!n.bounds.isEmpty &&
-                (n.text.contains("Aceptar", ignoreCase = true) ||
-                        n.contentDescription?.contains("Aceptar", ignoreCase = true) == true)
-            ) {
-                return n.bounds
-            }
+    fun chosenAcceptSnapshot(): PicapNodeSnapshot? =
+        nodes.firstOrNull {
+            isAcceptButtonLabel(it.text, it.contentDescription) && !it.bounds.isEmpty
         }
-        return null
+
+    /** Bounds del botón Aceptar elegido para el tap, o null si no existe. */
+    fun boundsForAcceptLabel(): Rect? = chosenAcceptSnapshot()?.bounds
+
+    /**
+     * Diagnóstico de campo (TREE_DEBUG): lista TODOS los nodos cuyo text/CD
+     * contiene "aceptar" — incluyendo descartados como el banner "No cumple
+     * tus filtros de autoaceptar" — con sus detalles, marcando el elegido
+     * para el tap. Si un descartado tiene bounds plausibles y el ELEGIDO no,
+     * el matcher es el sospechoso.
+     */
+    fun describeAcceptMatches(): String {
+        val loose = nodes.filter { isAcceptLikeLabel(it.text, it.contentDescription) }
+        if (loose.isEmpty()) return "ACCEPT-BTN: sin nodos que contengan 'aceptar'."
+        val chosen = chosenAcceptSnapshot()
+        return loose.joinToString(separator = "\n") { n ->
+            val tag = if (n === chosen) "ELEGIDO " else "descartado"
+            "ACCEPT-BTN: $tag class=${n.className} text=\"${n.text}\" cd=\"${n.contentDescription}\" " +
+                    "bounds=${n.bounds} clickable=${n.clickable} enabled=${n.enabled} visibleToUser=${n.visibleToUser}"
+        }
     }
 
     /** Recicla todos los candidatos salvo la raíz (propiedad del caller). */
@@ -370,7 +402,9 @@ class PicapOfferProcessor(
         // render) y NO registrar la orden en la tarjeta ni en el historial.
         // Regla de producto: si no es Cruz Verde SIEMPRE se cierra; no se memorizan
         // ids de servicios ya cerrados (una oferta que reaparezca se vuelve a cerrar).
-        if (order.servicio.isEmpty() && nodesContent.any { it.contains("Aceptar", ignoreCase = true) }) {
+        // El CD del botón es exactamente "Aceptar"; match exacto para no confundir
+        // el banner de filtro "No cumple tus filtros de autoaceptar" con un popup.
+        if (order.servicio.isEmpty() && nodesContent.any { isAcceptButtonLabel(it, null) }) {
             if (order.id == closer.pendingCloseId) {
                 Log.d(SERVICE_TAG, "NO-CV: orden #${order.id} ya tiene timer activo (pending=${closer.pendingCloseId}); no se re-agenda.")
             } else {
@@ -527,6 +561,12 @@ class PicapOfferProcessor(
         }
         val cx = bounds.centerX().toFloat()
         val cy = bounds.centerY().toFloat()
+        if (TREE_DEBUG) {
+            // Diagnóstico de campo: qué nodos casaron "aceptar" y cuál eligió
+            // el tap (comparar bounds del ELEGIDO con la posición visual real).
+            Log.i(SERVICE_TAG, scan.describeAcceptMatches())
+            Log.i(SERVICE_TAG, "ACCEPT-BTN: tap planeado en ($cx, $cy) sobre bounds $bounds.")
+        }
         Log.d(SERVICE_TAG, "AUTO-ACCEPT: Despachando gesto de respaldo en ($cx, $cy)...")
         val result = withTimeoutOrNull(GESTURE_TIMEOUT_MS) {
             withContext(Dispatchers.Main) {
@@ -606,17 +646,18 @@ class PicapOfferProcessor(
                     bounds = bounds,
                     clickable = node.isClickable,
                     enabled = node.isEnabled,
+                    visibleToUser = node.isVisibleToUser,
                 )
             )
 
-            // Candidato al botón Aceptar: cualquier nodo con "Aceptar" en text o
-            // contentDescription. El popup 2026-10 renderiza el botón en un
-            // contenedor custom (el relleno animado vive en otra vista) y la
-            // clase ya no es confiable (puede no ser Button/TextView): el
-            // primer-match en pre-orden más la cadena de padres alcanza.
-            val isAcceptButton =
-                text.contains("Aceptar", ignoreCase = true) ||
-                        cd.contains("Aceptar", ignoreCase = true)
+            // Candidato al botón Aceptar: label EXACTO "Aceptar" (text o CD).
+            // El popup 2026-10 renderiza el botón en un contenedor custom (el
+            // relleno animado vive en otra vista) y la clase ya no es
+            // confiable, pero la etiqueta sí: el match por subcadena casaba
+            // también el banner de filtro "No cumple tus filtros de
+            // autoaceptar" (va antes en pre-orden) y ni ACTION_CLICK ni el
+            // tap de gesto llegaban al botón real (#db527).
+            val isAcceptButton = isAcceptButtonLabel(text, rawCd)
             if (isAcceptButton) candidates.add(node)
 
             for (i in 0 until node.childCount) {
