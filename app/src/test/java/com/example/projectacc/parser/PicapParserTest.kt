@@ -76,6 +76,52 @@ class PicapParserTest {
     }
 
     @Test
+    fun `parsea popup 2026-11 con ID sin dos puntos y prefijos Recoger Entregar`() {
+        // Textos tal como los muestra el popup nuevo (captura de campo).
+        val texts = listOf(
+            "Mensajería",
+            "ID c8f0f",
+            "Tu ganancia final",
+            "16.001 COP",
+            "1.060 COP/Km",
+            "Usuario corp. verificado",
+            "Cruz Verde Colombia",
+            "No cumple tus filtros de autoaceptar",
+            "Recoger · a 11 mins (4.76 km)",
+            "Calle 15 & Avenida 0, Cúcuta, Norte de Santander, Colombia",
+            "Entregar · 11 min (15.1 km)",
+            "Calle 14a # 20-45, Barrio Toledo Plata, Cúcuta, Norte de Santander, Colombia",
+            "5.0",
+            "Hombre",
+            "5042 Viajes",
+            "Aceptar"
+        )
+
+        val order = PicapParser.parseOrder(texts)
+
+        assertEquals("c8f0f", order.id)
+        assertEquals("16.001 COP", order.ganancia)
+        assertEquals("Recoger · a 11 mins (4.76 km)", order.tiempoRecogida)
+        assertEquals("Calle 15 & Avenida 0, Cúcuta, Norte de Santander, Colombia", order.direccionRecogida)
+        assertEquals("Entregar · 11 min (15.1 km)", order.tiempoEntrega)
+        assertEquals(
+            "Calle 14a # 20-45, Barrio Toledo Plata, Cúcuta, Norte de Santander, Colombia",
+            order.direccionEntrega
+        )
+        assertEquals("Cruz Verde Colombia", order.servicio)
+        assertEquals(4.76, order.kmRecogida, 0.001)
+        assertEquals(15.1, order.kmEntrega, 0.001)
+    }
+
+    @Test
+    fun `extrae el ID del popup con y sin dos puntos`() {
+        assertEquals("c8f0f", PicapParser.extractOrderId("ID c8f0f"))
+        assertEquals("555", PicapParser.extractOrderId("ID: 555"))
+        assertEquals("c8f0f", PicapParser.extractOrderId("Mensajería ID c8f0f"))
+        assertEquals("", PicapParser.extractOrderId("Aceptar"))
+    }
+
+    @Test
     fun `entrega corta sin prefijo A con metros decimales (Picap 2026-10)`() {
         val texts = listOf(
             "Tu ganancia final",

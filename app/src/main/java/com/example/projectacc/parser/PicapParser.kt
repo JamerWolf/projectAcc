@@ -9,6 +9,31 @@ object PicapParser {
     private val kmParensRegex = Regex("\\(([\\d,\\.]+)\\s*(km|m)\\)")
 
     /**
+     * Ancla del ID de la oferta. Picap la renderizaba como "ID: abc123"; la UI
+     * de 2026-11 la muestra como "ID abc123" (sin dos puntos), también dentro
+     * de un contentDescription más largo ("Mensajería ID abc123"). Única
+     * definición de la ancla: la usan el parser, el gate de porcentaje, el
+     * cierre no-CV y el auto-clic en lista.
+     */
+    private val orderIdRegex = Regex("\\bID[:\\s]\\s*([A-Za-z0-9_-]+)")
+
+    /** Primera parte de la línea de tiempo que Picap rotula como recogida. */
+    private val pickupLabelRegex = Regex("\\b(recoger|recogida)\\b", RegexOption.IGNORE_CASE)
+
+    /** Primera parte de la línea de tiempo que Picap rotula como entrega. */
+    private val deliveryLabelRegex = Regex("\\b(entregar|entrega)\\b", RegexOption.IGNORE_CASE)
+
+    /**
+     * Extrae el ID de una oferta de un texto del árbol, con o sin dos puntos.
+     * Devuelve "" si el texto no es un ancla de ID.
+     */
+    fun extractOrderId(text: String): String =
+        orderIdRegex.find(text)?.groupValues?.get(1) ?: ""
+
+    /** true si [text] es un nodo con el ID de la oferta. */
+    fun isOrderIdNode(text: String): Boolean = extractOrderId(text).isNotEmpty()
+
+    /**
      * Analiza la lista de textos para extraer los campos del modelo PicapOrder.
      */
     fun parseOrder(texts: List<String>): PicapOrder {
@@ -22,9 +47,10 @@ object PicapParser {
         for (i in texts.indices) {
             val current = texts[i]
 
-            // Extraer ID (formato "ID: 12345")
-            if (current.startsWith("ID: ")) {
-                id = current.replace("ID: ", "").trim()
+            // ID: "ID: 12345" (UI hasta 2026-10) y "ID 12345" (UI 2026-11).
+            val lineId = extractOrderId(current)
+            if (lineId.isNotEmpty()) {
+                id = lineId
             }
 
             // Ganancia: el valor está después de "Tu ganancia final"
@@ -32,30 +58,35 @@ object PicapParser {
                 ganancia = texts[i + 1]
             }
 
-            // Recogida: Detecta "A X mins...". Solo si aún no se capturó una recogida:
-            // la SEGUNDA línea con forma "A ..." es la entrega corta
-            // ("A menos de un minuto (890m)"), que antes pisaba la recogida y
-            // dejaba dirEnt sin parsear.
-            val isALine = current.startsWith("A ") && current.contains("min")
-            // Entrega clásica: "X min(s) (X km)" que NO empieza por "A ".
-            val isDeliveryClassic =
-                (current.contains("min (") || current.contains("mins (")) && !current.startsWith("A ")
-            // Entrega corta: km entre paréntesis cuando la recogida ya está capturada.
-            // El paréntesis distingue la línea de una dirección; cubre la forma vieja
-            // "A menos de un minuto (890m)" y la forma nueva de Picap 2026-10
-            // "Menos de un minuto (259.9 m)" que ya NO lleva el prefijo "A ".
-            val isDeliveryShort = tiempoRec.isNotEmpty() && kmParensRegex.containsMatchIn(current)
+            // Línea de tiempo: lleva minutos y el km entre paréntesis, en
+            // cualquiera de las formas conocidas:
+            //   "A 9 mins (4.31 km)"            (UI hasta 2026-10)
+            //   "12 min (3.4 km)"               (entrega clásica)
+            //   "A menos de un minuto (890m)"   (entrega corta vieja)
+            //   "Menos de un minuto (259.9 m)"  (entrega corta 2026-10)
+            //   "Recoger · a 11 mins (4.76 km)" (UI 2026-11)
+            //   "Entregar · 11 min (15.1 km)"   (UI 2026-11)
+            val hasMinutes = current.contains("min", ignoreCase = true)
+            val labeledPickup = hasMinutes && pickupLabelRegex.containsMatchIn(current)
+            val labeledDelivery = hasMinutes && deliveryLabelRegex.containsMatchIn(current)
+            // Las etiquetas "Recoger"/"Entregar" de la UI 2026-11 deciden el
+            // papel de la línea; sin etiquetas se conserva el orden histórico
+            // (la primera línea de tiempo es la recogida, la siguiente la
+            // entrega), probado en los tests de las UIs anteriores.
+            val isTimeLine = labeledPickup || labeledDelivery ||
+                (hasMinutes && kmParensRegex.containsMatchIn(current))
+            val isPickup = labeledPickup || (isTimeLine && !labeledDelivery && tiempoRec.isEmpty())
 
-            if (isALine && tiempoRec.isEmpty() && i + 1 < texts.size) {
+            if (isPickup && i + 1 < texts.size) {
                 tiempoRec = current
                 dirRec = texts[i + 1]
-            } else if (isDeliveryClassic || isDeliveryShort) {
+            } else if (isTimeLine) {
                 tiempoEnt = current
                 // La dirección puede estar en i+1 o en i+2 (si el ID se interpone)
                 if (i + 1 < texts.size) {
-                    if (texts[i + 1].startsWith("ID: ")) {
+                    if (isOrderIdNode(texts[i + 1])) {
                         // El ID se interpuso: extraer ID aquí y la dirección está en i+2
-                        id = texts[i + 1].replace("ID: ", "").trim()
+                        id = extractOrderId(texts[i + 1])
                         if (i + 2 < texts.size) {
                             dirEnt = texts[i + 2]
                         }

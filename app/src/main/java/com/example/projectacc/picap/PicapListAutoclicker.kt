@@ -4,6 +4,7 @@ import android.util.Log
 import android.view.accessibility.AccessibilityNodeInfo
 import com.example.projectacc.OrderStateManager
 import com.example.projectacc.SERVICE_TAG
+import com.example.projectacc.parser.PicapParser
 
 /**
  * List autoclick for Picap: detects "Precio estimado", skips already-scanned
@@ -17,6 +18,9 @@ class PicapListAutoclicker {
     internal var hasScannedInitially = false
 
     private val serviceIdRegex = Regex("ID: ([a-f0-9]+)", RegexOption.IGNORE_CASE)
+
+    /** ID de una orden de la lista: comparte la ancla única de [PicapParser]. */
+    private fun orderIdOf(contentDescription: String): String = PicapParser.extractOrderId(contentDescription)
 
     /**
      * Busca recursivamente en el árbol de nodos un elemento cuyo contentDescription
@@ -43,8 +47,7 @@ class PicapListAutoclicker {
         val cd = node.contentDescription?.toString() ?: ""
         if (cd.contains("Precio estimado")) {
             // Extraer el ID de este servicio
-            val idMatch = serviceIdRegex.find(cd)
-            val serviceId = idMatch?.groupValues?.get(1) ?: ""
+            val serviceId = orderIdOf(cd)
 
             // --- VERIFICAR MEMORIA ANTES DE HACER CLIC ---
             val scannedIds = OrderStateManager.scannedServiceIds.value
@@ -107,10 +110,9 @@ class PicapListAutoclicker {
 
         val cd = node.contentDescription?.toString() ?: ""
         if (cd.contains("Precio estimado")) {
-            // Buscar el patrón "ID: XXXXX" en el contentDescription
-            val idMatch = serviceIdRegex.find(cd)
-            if (idMatch != null) {
-                val id = idMatch.groupValues[1]
+            // Buscar el ancla "ID: XXXXX" / "ID XXXXX" en el contentDescription
+            val id = orderIdOf(cd)
+            if (id.isNotEmpty()) {
                 ids.add(id)
                 Log.d(SERVICE_TAG, "MEMORY: Guardando ID de lista: $id")
             }

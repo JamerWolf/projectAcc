@@ -345,7 +345,7 @@ class PicapOfferProcessor(
                     // principal de Picap y su porcentaje puede ser menor al último
                     // visto, lo que silenciaba todo el procesamiento de la oferta.
                     val markers = scan.contentDescriptions
-                    val isOfferPopup = markers.any { it.startsWith("ID: ") } &&
+                    val isOfferPopup = markers.any { PicapParser.isOrderIdNode(it) } &&
                             markers.any { it.contains("Aceptar") }
                     if (isOfferPopup) {
                         Log.i(SERVICE_TAG, "PICAP: porcentaje $currentPercentage < previo $prevPercentage pero es popup de oferta; se procesa igual.")

@@ -150,7 +150,7 @@ class PicapOfferCloser(
         for (w in wins) {
             val content = mutableListOf<String>()
             AccessibilityTree.flattenContentDescriptions(w, content)
-            if (content.any { it.startsWith("ID: ") } && content.any { it.contains("Aceptar") }) {
+            if (content.any { PicapParser.isOrderIdNode(it) } && content.any { it.contains("Aceptar") }) {
                 visible = true
             }
         }
@@ -187,7 +187,7 @@ class PicapOfferCloser(
         for (node in chain) {
             val content = mutableListOf<String>()
             AccessibilityTree.flattenContentDescriptions(node, content)
-            if (content.any { it.startsWith("ID: ") }) best = node
+            if (content.any { PicapParser.isOrderIdNode(it) }) best = node
         }
         chain.forEach { if (it !== best) it.recycle() }
         return best
