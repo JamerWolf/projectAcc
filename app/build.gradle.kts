@@ -1,7 +1,23 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
 }
+
+// Credenciales de firma de release: local.properties (ignorado por git) o
+// variables de entorno. El keystore vive FUERA del repo y debe respaldarse
+// aparte; si se pierde, no se puede volver a publicar bajo la misma identidad.
+// Ver docs/conventions/build-test-release.md.
+val signingProperties = Properties().apply {
+    rootProject.file("local.properties")
+        .takeIf { it.exists() }
+        ?.inputStream()
+        ?.use { load(it) }
+}
+
+fun signingProperty(name: String): String? =
+    signingProperties.getProperty(name) ?: System.getenv(name)
 
 android {
     namespace = "com.example.projectacc"
@@ -23,10 +39,12 @@ android {
 
     signingConfigs {
         create("release") {
-            storeFile = file("C:\\Users\\javier\\.android\\debug.keystore")
-            storePassword = "android"
-            keyAlias = "androiddebugkey"
-            keyPassword = "android"
+            // Sin estas propiedades AGP falla en validateSigningRelease en vez
+            // de emitir un APK sin firmar.
+            signingProperty("RELEASE_STORE_FILE")?.let { storeFile = file(it) }
+            signingProperty("RELEASE_STORE_PASSWORD")?.let { storePassword = it }
+            signingProperty("RELEASE_KEY_ALIAS")?.let { keyAlias = it }
+            signingProperty("RELEASE_KEY_PASSWORD")?.let { keyPassword = it }
         }
     }
     buildTypes {

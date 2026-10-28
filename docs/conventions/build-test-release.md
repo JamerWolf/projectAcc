@@ -10,7 +10,7 @@ release signing is machine-bound. JUnit 4 only; no CI.
 | Modules | Single `:app`; `rootProject.name = "project acc"` (space included) | `settings.gradle.kts:25-26` |
 | namespace / applicationId | `com.example.projectacc` | `app/build.gradle.kts:7`, `:15` |
 | SDKs | compileSdk 36 (minorApiLevel 1), minSdk 24, targetSdk 36 | `app/build.gradle.kts:8-17` |
-| Version | `versionCode = 64`, `versionName = "0.3.49"` — **manual** versioning | `app/build.gradle.kts:18-19` |
+| Version | `versionCode = 69`, `versionName = "1.0.4"` — **manual** versioning | `app/build.gradle.kts:34-35` |
 | Plugins | `com.android.application` (AGP 9.0.0) + `org.jetbrains.kotlin.plugin.compose` (Kotlin 2.2.10). **No separate kotlin-android plugin** — AGP 9 ships built-in Kotlin | `app/build.gradle.kts:1-4`, `gradle/libs.versions.toml:2`, `:9`, `:31-32` |
 | Compose BOM | `2026.02.01` | `gradle/libs.versions.toml:10` |
 | Build types | Only `release`, no flavors, `isMinifyEnabled = false` | `app/build.gradle.kts:32-41` |
@@ -21,12 +21,29 @@ release signing is machine-bound. JUnit 4 only; no CI.
 
 ### Release signing (fact, not a secret)
 
-`app/build.gradle.kts:24-31` defines a `release` signing config pointing at a
-**machine-specific** local debug keystore path
-(`C:\Users\javier\.android\debug.keystore`) with credentials hardcoded in the
-build script. **Consequence: `assembleRelease` fails on any other machine.**
-Never reproduce the password values in docs, logs, or commits; describe the
-fact only.
+`app/build.gradle.kts` builds the `release` signing config from four
+properties, read from `local.properties` (gitignored) or the environment:
+
+| Property | Value on the reference machine |
+|---|---|
+| `RELEASE_STORE_FILE` | `~/keystores/projectacc-release.jks` (outside the repo) |
+| `RELEASE_STORE_PASSWORD` | random, in `local.properties` only |
+| `RELEASE_KEY_ALIAS` | `projectacc` |
+| `RELEASE_KEY_PASSWORD` | same as the store password |
+
+The keystore is **not** in git. Back it up off-machine together with
+`local.properties`; without both, a machine loss is unrecoverable.
+
+If the properties are missing, AGP fails at `validateSigningRelease` instead
+of emitting an unsigned APK.
+
+**History:** releases up to 1.0.3 were signed with a `debug.keystore` living
+in a Windows user profile. That keystore was lost when the machine was
+formatted, so the signing identity changed at 1.0.4. Existing installs cannot
+receive 1.0.4 as an update — they must be uninstalled and reinstalled, losing
+SharedPreferences (settings, saved locations, order history). Never store the
+signing key only inside a machine profile again.
+
 
 ## Commands (Windows)
 
@@ -111,9 +128,16 @@ ending in `.apk`, and compares it semver-ish to `versionName`.
 
 Checklist:
 
-1. Bump `versionCode`/`versionName` in `app/build.gradle.kts:18-19`.
+1. Bump `versionCode`/`versionName` in `app/build.gradle.kts:34-35`.
 2. Commit `chore: release X.Y.Z (versionCode N)`.
-3. Create a GitHub Release with a `vX.Y.Z` tag and attach the `.apk` asset.
+3. `assembleRelease` → `app/build/outputs/apk/release/app-release.apk`.
+   Verify with `apksigner verify --print-certs` that the signer is the current
+   keystore, not an unsigned or foreign build.
+4. Create a GitHub Release with a `vX.Y.Z` tag and attach that `.apk` asset.
+
+If the signer identity changed (a lost keystore), the release notes **must**
+say the previous version has to be uninstalled first: existing installs
+reject an APK signed with a different key.
 
 ## Manifest permissions & services
 

@@ -6,8 +6,8 @@ listens to the Picap app via an `AccessibilityService`, intercepts WhatsApp
 notifications via a `NotificationListenerService`, auto-accepts orders that
 match configurable ganancia/km rules, auto-replies with the vehicle plate, and
 shows an on-screen km overlay. UI is Jetpack Compose + Material3
-(`app/build.gradle.kts:46-48`); current version `0.3.49`
-(`app/build.gradle.kts:18-19`).
+(`app/build.gradle.kts:64-65`); current version `1.0.4`
+(`app/build.gradle.kts:34-35`).
 
 This file is the entry point. Detail lives in `docs/conventions/`.
 
@@ -37,7 +37,7 @@ Full command table, JDK notes, and release steps:
 | Product-UI anchors are parse contracts — never "clean them up" | `"ID: "`, `"Tu ganancia final"`, `"Aceptar"`, `"📏 …"` (`PicapParser.kt:26-31`, `KmOverlay.kt:70`) |
 | UI copy stays hardcoded Spanish; identifiers stay English | Zero `stringResource` in Kotlin; `res/values/strings.xml:2-3` is app name + a11y description only |
 | A parser/eval change ships with a unit test in the same commit | `PicapParserTest.kt` is the template |
-| Release signing is machine-bound | `app/build.gradle.kts:24-31` points at a local debug keystore with hardcoded credentials → `assembleRelease` fails elsewhere. Never copy the password values anywhere |
+| Release signing lives outside the repo | `app/build.gradle.kts` reads `RELEASE_STORE_FILE` / `RELEASE_STORE_PASSWORD` / `RELEASE_KEY_ALIAS` / `RELEASE_KEY_PASSWORD` from `local.properties` (gitignored) or env. The keystore is at `~/keystores/projectacc-release.jks` and **must be backed up off-machine**: losing it permanently breaks the update path (the pre-1.0.4 key was lost this way, so existing installs must be uninstalled). Never commit the keystore or its password |
 | Comment language = language already used in that file | Mixed Spanish/English by area; see [coding-style](docs/conventions/coding-style.md#comment-language) |
 | Errors: swallow + log (`catch (e: Exception)` → `Log.e`), never rethrow | House pattern across services |
 
